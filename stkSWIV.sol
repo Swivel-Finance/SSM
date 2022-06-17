@@ -18,47 +18,51 @@ contract stkSWIV is ERC20 {
         return ((SWIV.balanceOf(address(this))*1e26)/totalDeposited);
     }
 
-    function mint(uint256 amount) public returns (uint256) {
+    function mint(uint256 shares, address receiver) public returns (uint256) {
 
-        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), amount);
+        uint256 assets = (shares * exchangeRateCurrent())/1e26;
 
-        uint256 returned = ((amount * 1e26)/exchangeRateCurrent());
+        totalDeposited += assets;
 
-        _mint(msg.sender, returned);
+        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);        
 
-        return (returned);
+        _mint(receiver, shares);
+
+        return (assets);
     }
 
-    function deposit(uint256 amount) public returns (uint256) {
+    function deposit(uint256 assets, address receiver) public returns (uint256) {
 
-        uint256 sent = (amount * exchangeRateCurrent())/1e26;
+        uint256 shares = ((assets * 1e26)/exchangeRateCurrent());
+        
+        totalDeposited += assets;
 
-        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), sent);        
+        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
 
-        _mint(msg.sender, amount);
+        _mint(receiver, shares);
 
-        return (amount);
+        return (shares);
     }
 
-    function redeemUnderlying(uint256 amount) public returns (uint256) {
+    function withdraw(uint256 assets, address receiver) public returns (uint256) {
 
-        uint256 sent = ((amount * 1e26)/exchangeRateCurrent());
+        uint256 shares = ((assets * 1e26)/exchangeRateCurrent());
 
-        _burn(msg.sender, sent);
+        _burn(msg.sender, shares);
 
-        SafeTransferLib.transfer(SWIV, msg.sender, amount);
+        SafeTransferLib.transfer(SWIV, receiver, assets);
 
-        return (amount);
+        return (shares);
     }
 
-    function redeemShares(uint256 amount) public returns (uint256) {
+    function redeem(uint256 shares, address receiver) public returns (uint256) {
 
-        uint256 returned = (amount * exchangeRateCurrent())/1e26;
+        uint256 assets = (shares * exchangeRateCurrent())/1e26;
 
-        _burn(msg.sender, amount);
+        _burn(msg.sender, shares);
 
-        SafeTransferLib.transfer(SWIV, msg.sender, returned);
+        SafeTransferLib.transfer(SWIV, receiver, assets);
 
-        return (amount);
+        return (assets);
     }
 }
