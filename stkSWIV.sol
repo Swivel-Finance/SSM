@@ -56,7 +56,7 @@ contract stkSWIV is ERC20 {
     }
 
     function maxMint(address receiver) public view returns (uint256 maxShares) {
-        return (convertToShares(SWIV.balanceOf(receiver)));
+        return type(uint256).max;
     }
 
     function maxRedeem(address owner) public view returns (uint256 maxShares) {
@@ -68,7 +68,7 @@ contract stkSWIV is ERC20 {
     }
 
     function maxDeposit(address receiver) public view returns (uint256 maxAssets) {
-        return (SWIV.balanceOf(receiver));
+        return type(uint256).max;
     }
 
     function cooldown(uint256 amount) public returns (uint256) {
