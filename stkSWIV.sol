@@ -123,6 +123,8 @@ contract stkSWIV is ERC20 {
 
         cooldownAmount[msg.sender] = 0;
 
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
         return (assets);
     }
 
@@ -167,6 +169,8 @@ contract stkSWIV is ERC20 {
         cooldownTime[msg.sender] = 0;
 
         cooldownAmount[msg.sender] = 0;
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         return (shares);
     }
@@ -219,6 +223,8 @@ contract stkSWIV is ERC20 {
 
         cooldownAmount[msg.sender] = 0;
 
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+
         return (assets);
     }
 
@@ -269,6 +275,8 @@ contract stkSWIV is ERC20 {
         cooldownTime[msg.sender] = 0;
 
         cooldownAmount[msg.sender] = 0;
+
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         return (shares);
     }
