@@ -19,6 +19,16 @@ contract stkSWIV is ERC20 {
 
     mapping (address => uint256) cooldownAmount;
 
+    event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
+
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
+
     error Exception(uint8, uint256, uint256, address, address);
 
     constructor (Vault v, ERC20 s, ERC20 b, bytes32 p) ERC20("Staked SWIV", "stkSWIV", 18) {
@@ -79,6 +89,8 @@ contract stkSWIV is ERC20 {
 
         _mint(receiver, shares);
 
+        emit Deposit(msg.sender, receiver, assets, shares);
+
         return (assets);
     }
 
@@ -87,6 +99,12 @@ contract stkSWIV is ERC20 {
         uint256 assets = convertToAssets(shares);
 
         uint256 cTime = cooldownTime[msg.sender];
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender];
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
 
         if (cTime > block.timestamp || cTime == 0) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
@@ -116,6 +134,8 @@ contract stkSWIV is ERC20 {
 
         _mint(receiver, shares);
 
+        emit Deposit(msg.sender, receiver, assets, shares);
+
         return (shares);
     }
 
@@ -124,6 +144,12 @@ contract stkSWIV is ERC20 {
         uint256 shares = convertToShares(assets);
 
         uint256 cTime = cooldownTime[msg.sender];
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender];
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
 
         if (cTime > block.timestamp || cTime == 0) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
@@ -155,14 +181,22 @@ contract stkSWIV is ERC20 {
 
         _mint(receiver, shares);
 
+        emit Deposit(msg.sender, receiver, assets, shares);
+
         return (assets);
     }
 
-    function redeemZap(uint256 shares, address receiver) public returns (uint256) {
+    function redeemZap(uint256 shares, address receiver, address owner) public returns (uint256) {
 
         uint256 assets = convertToAssets(shares);
 
         uint256 cTime = cooldownTime[msg.sender];
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender];
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
 
         if (cTime > block.timestamp || cTime == 0) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
@@ -198,14 +232,22 @@ contract stkSWIV is ERC20 {
 
         _mint(receiver, shares);
 
+        emit Deposit(msg.sender, receiver, assets, shares);
+
         return (shares);
     }
 
-    function withdrawZap(uint256 assets, address receiver) public returns (uint256) {
+    function withdrawZap(uint256 assets, address receiver, address owner) public returns (uint256) {
 
         uint256 shares = convertToShares(assets);
 
         uint256 cTime = cooldownTime[msg.sender];
+
+        if (msg.sender != owner) {
+            uint256 allowed = allowance[owner][msg.sender];
+
+            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+        }
 
         if (cTime > block.timestamp || cTime == 0) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
