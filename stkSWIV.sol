@@ -15,6 +15,8 @@ contract stkSWIV is ERC20 {
 
     bytes32 public balancerPoolID;
 
+    uint256 public cooldownLength = 2 weeks;
+
     mapping (address => uint256) cooldownTime;
 
     mapping (address => uint256) cooldownAmount;
@@ -76,7 +78,7 @@ contract stkSWIV is ERC20 {
             revert Exception(3, cooldownAmount[msg.sender] + amount, balanceOf[msg.sender], msg.sender, address(0));
         }
         // Reset cooldown time
-        cooldownTime[msg.sender] = block.timestamp + 1209600;
+        cooldownTime[msg.sender] = block.timestamp + cooldownLength;
         // Add the amount;
         cooldownAmount[msg.sender] = cooldownAmount[msg.sender] + amount;
     }
