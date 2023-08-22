@@ -117,6 +117,10 @@ contract stkSWIV is ERC20 {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
 
+        if (shares > this.balanceOf(owner)) {
+            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+        }
+
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
 
         _burn(msg.sender, shares);
@@ -164,6 +168,10 @@ contract stkSWIV is ERC20 {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
 
+        if (shares > this.balanceOf(owner)) {
+            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+        }
+
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
 
         _burn(msg.sender, shares);
@@ -181,9 +189,16 @@ contract stkSWIV is ERC20 {
 
         uint256 assets = convertToAssets(shares);
 
-        SafeTransferLib.transferFrom(balancerLPT, msg.sender, address(this), assets);
+        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
 
-        // Todo: balancer tx
+        JoinPoolRequest memory requestData = JoinPoolRequest({
+            assets: [SWIV, address(0)],
+            maxAmountsIn: [assets, msg.value],
+            userData: new bytes(0),
+            fromInternalBalance: false
+        });
+
+        IVault(balancerVault).joinPool(poolId, address(this), address(this), request);
 
         _mint(receiver, shares);
 
@@ -213,11 +228,22 @@ contract stkSWIV is ERC20 {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
 
-        // Todo: balancer tx
+        if (shares > this.balanceOf(owner)) {
+            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+        }
 
-        SafeTransferLib.transfer(balancerLPT, receiver, assets);
+        ExitPoolRequest memory requestData = ExitPoolRequest({
+            assets: [SWIV, address(0)],
+            minAmountsOut: [assets, msg.value],
+            userData: new bytes(0),
+            toInternalBalance: false
+        });
 
-        // Todo: ETH transfer
+        IVault(balancerVault).exitPool(poolId, address(this), address(this), request);
+
+        SafeTransferLib.transfer(SWIV, receiver, SWIV.balanceOf(address(this)));
+
+        reciever.transfer(address(this).balance);
 
         _burn(msg.sender, shares);
 
@@ -236,7 +262,14 @@ contract stkSWIV is ERC20 {
 
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);        
 
-        // Todo: balancer tx
+        JoinPoolRequest memory requestData = JoinPoolRequest({
+            assets: [SWIV, address(0)],
+            maxAmountsIn: [assets, msg.value],
+            userData: new bytes(0),
+            fromInternalBalance: false
+        });
+
+        IVault(balancerVault).joinPool(poolId, address(this), address(this), request);
 
         _mint(receiver, shares);
 
@@ -266,11 +299,22 @@ contract stkSWIV is ERC20 {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
 
-        // Todo: balancer tx
+        if (shares > this.balanceOf(owner)) {
+            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+        }
 
-        SafeTransferLib.transfer(balancerLPT, receiver, assets);
+        ExitPoolRequest memory requestData = ExitPoolRequest({
+            assets: [SWIV, address(0)],
+            minAmountsOut: [assets, msg.value],
+            userData: new bytes(0),
+            toInternalBalance: false
+        });
 
-        // Todo: ETH transfer
+        IVault(balancerVault).exitPool(poolId, address(this), address(this), request);
+
+        SafeTransferLib.transfer(SWIV, receiver, SWIV.balanceOf(address(this)));
+
+        reciever.transfer(address(this).balance);
 
         _burn(msg.sender, shares);
 
