@@ -45,48 +45,56 @@ contract stkSWIV is ERC20 {
 
     // The number of SWIV/ETH balancer shares owned / the stkSWIV total supply
     // Conversion of 1 stkSWIV share to an amount of SWIV/ETH balancer shares (scaled to 1e26) (starts at 1:1e26)
+    // @returns: the exchange rate
     function exchangeRateCurrent() public view returns (uint256) {
         return ((SWIV.balanceOf(address(this)) * 1e26) / this.totalSupply());
     }
 
     // Conversion of amount of SWIV/ETH balancer assets to stkSWIV shares
     // @param: assets - amount of SWIV/ETH balancer pool tokens
+    // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
         return ((assets * 1e26) / exchangeRateCurrent());
     }
 
     // Conversion of amount of stkSWIV shares to SWIV/ETH balancer assets
     // @param: shares - amount of stkSWIV shares
+    // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
         return ((shares * exchangeRateCurrent()) / 1e26);
     }
 
     // Maximum amount a given receiver can mint
     // @param: receiver - address of the receiver
-    function maxMint(address receiver) public view returns (uint256 maxShares) {
+    // @returns: the maximum amount of stkSWIV shares
+    function maxMint(address receiver) public pure returns (uint256 maxShares) {
         return type(uint256).max;
     }
 
     // Maximum amount a given owner can redeem
     // @param: owner - address of the owner
+    // @returns: the maximum amount of stkSWIV shares
     function maxRedeem(address owner) public view returns (uint256 maxShares) {
         return (this.balanceOf(owner));
     }
 
     // Maximum amount a given owner can withdraw
     // @param: owner - address of the owner
+    // @returns: the maximum amount of balancerLPT assets
     function maxWithdraw(address owner) public view returns (uint256 maxAssets) {
         return (convertToAssets(this.balanceOf(owner)));
     }
 
     // Maximum amount a given receiver can deposit
     // @param: receiver - address of the receiver
-    function maxDeposit(address receiver) public view returns (uint256 maxAssets) {
+    // @returns: the maximum amount of balancerLPT assets
+    function maxDeposit(address receiver) public pure returns (uint256 maxAssets) {
         return type(uint256).max;
     }
 
     // Queues `amount` of balancerLPT assets to be withdrawn after the cooldown period
     // @param: amount - amount of balancerLPT assets to be withdrawn
+    // @returns: the total amount of balancerLPT assets to be withdrawn
     function cooldown(uint256 amount) public returns (uint256) {
 
         // Require the total amount to be < balanceOf
@@ -97,11 +105,14 @@ contract stkSWIV is ERC20 {
         cooldownTime[msg.sender] = block.timestamp + cooldownLength;
         // Add the amount;
         cooldownAmount[msg.sender] = cooldownAmount[msg.sender] + amount;
+
+        return(cooldownAmount[msg.sender] + amount);
     }
 
     // Mints `shares` to `receiver` and transfers `assets` of balancerLPT tokens from `msg.sender`
     // @param: shares - amount of stkSWIV shares to mint
     // @param: receiver - address of the receiver
+    // @returns: the amount of balancerLPT tokens deposited
     function mint(uint256 shares, address receiver) public payable returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
@@ -119,6 +130,7 @@ contract stkSWIV is ERC20 {
     // @param: shares - amount of stkSWIV shares to redeem
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
+    // @returns: the amount of balancerLPT tokens withdrawn
     function redeem(uint256 shares, address receiver, address owner) public returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
@@ -160,6 +172,7 @@ contract stkSWIV is ERC20 {
     // Deposits `assets` of balancerLPT tokens from `msg.sender` and mints `shares` to `receiver`
     // @param: assets - amount of balancerLPT tokens to deposit
     // @param: receiver - address of the receiver
+    // @returns: the amount of stkSWIV shares minted
     function deposit(uint256 assets, address receiver) public returns (uint256) {
         // Convert assets to shares          
         uint256 shares = convertToShares(assets);
@@ -177,6 +190,7 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of balancerLPT tokens to withdraw
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
+    // @returns: the amount of stkSWIV shares withdrawn
     function withdraw(uint256 assets, address receiver, address owner) public returns (uint256) {
         // Convert assets to shares
         uint256 shares = convertToShares(assets);
@@ -221,6 +235,7 @@ contract stkSWIV is ERC20 {
     // Then joins the balancer pool with the SWIV and ETH before minting `shares` to `receiver`
     // @param: shares - amount of stkSWIV shares to mint
     // @param: receiver - address of the receiver
+    // @returns: the amount of SWIV tokens deposited
     function mintZap(uint256 shares, address receiver) public payable returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
@@ -257,6 +272,7 @@ contract stkSWIV is ERC20 {
     // @param: shares - amount of stkSWIV shares to redeem
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
+    // @returns: the amount of SWIV tokens withdrawn
     function redeemZap(uint256 shares, address payable receiver, address owner) public returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
@@ -318,6 +334,7 @@ contract stkSWIV is ERC20 {
     // Then joins the balancer pool with the SWIV and ETH before minting `shares` to `receiver`
     // @param: assets - amount of SWIV tokens to deposit
     // @param: receiver - address of the receiver
+    // @returns: the amount of stkSWIV shares minted
     function depositZap(uint256 assets, address receiver) public payable returns (uint256) {
 
         // Convert assets to shares
@@ -354,6 +371,7 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of SWIV tokens to withdraw
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
+    // @returns: the amount of stkSWIV shares burnt
     function withdrawZap(uint256 assets, address payable receiver, address owner) public returns (uint256) {
         // Convert assets to shares
         uint256 shares = convertToShares(assets);
@@ -416,6 +434,7 @@ contract stkSWIV is ERC20 {
     // Method to redeem and withdraw BAL incentives or other stuck tokens / those needing recovery
     // @param: token - address of the token to withdraw
     // @param: receiver - address of the receiver
+    // @returns: the amount of tokens withdrawn
     function BALWithdraw(address token, address payable receiver) Authorized(admin) public returns (uint256) {
         if (token == address(0)) {
             receiver.transfer(address(this).balance);
