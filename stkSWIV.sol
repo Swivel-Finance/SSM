@@ -338,14 +338,15 @@ contract stkSWIV is ERC20 {
     function BALWithdraw(address token, address receiver) Authorized(admin) public returns (uint256) {
         if (token == address(0)) {
             receiver.transfer(address(this).balance);
+            return (address(this).balance);
         }
         else {
             // Get the balance of the token
             uint256 balance = IERC20(token).balanceOf(address(this));
             // Transfer the token to the receiver
             SafeTransferLib.transfer(IERC20(token), receiver, balance);
+            return (balance);
         }
-        return (balance);
     }
 
     // Sets a new admin address
