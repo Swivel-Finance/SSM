@@ -6,21 +6,21 @@ import './Utils/SafeTransferLib.sol';
 import './Interfaces/IVault.sol';
 
 contract stkSWIV is ERC20 {
-
+    // The Swivel Multisig (or should be)
     address public admin;
-
+    // The Swivel Token
     ERC20 immutable public SWIV;
-
+    // The Swivel/ETH balancer LP token
     ERC20 immutable public balancerLPT;
-
+    // The Static Balancer Vault
     Vault immutable public balancerVault;
-
+    // The Balancer Pool ID
     bytes32 public balancerPoolID;
-
+    // The withdrawal cooldown length
     uint256 public cooldownLength = 2 weeks;
-
+    // Mapping of user address -> unix timestamp for cooldown
     mapping (address => uint256) cooldownTime;
-
+    // Mapping of user address -> amount of balancerLPT assets to be withdrawn
     mapping (address => uint256) cooldownAmount;
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
