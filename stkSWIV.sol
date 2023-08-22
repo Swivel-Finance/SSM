@@ -40,6 +40,7 @@ contract stkSWIV is ERC20 {
         SWIV = s;
         balancerLPT = b;
         balancerPoolID = p;
+        admin = msg.sender;
     }
 
     // The number of SWIV/ETH balancer shares owned / the stkSWIV total supply
@@ -331,8 +332,10 @@ contract stkSWIV is ERC20 {
         return (shares);
     }
 
+    //////////////////// ADMIN FUNCTIONS ////////////////////
+
     // Method to redeem and withdraw BAL incentives or other stuck tokens / those needing recovery
-    function BALWithdraw(address token, address receiver) public returns (uint256) {
+    function BALWithdraw(address token, address receiver) Authorized(admin) public returns (uint256) {
         if (token == address(0)) {
             receiver.transfer(address(this).balance);
         }
@@ -345,8 +348,13 @@ contract stkSWIV is ERC20 {
         return (balance);
     }
 
+    // Sets a new admin address
+    function setAdmin(address _admin) Authorized(admin) public {
+        admin = _admin;
+    }
+
     // Authorized modifier
-    modifier authorized(address) {
+    modifier Authorized(address) {
         require(msg.sender == owner || msg.sender == address(this), "Not authorized");
         _;
     }
