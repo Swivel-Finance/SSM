@@ -70,7 +70,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
         uint256 supply = this.totalSupply();
-        return (supply == 0 ? assets : assets.mulDivDown(this.totalSupply() + 1e18, totalAssets() + 1));
+        return (assets.mulDivDown(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
     // Conversion of amount of stkSWIV shares to SWIV/ETH balancer assets
@@ -78,7 +78,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
         uint256 supply = this.totalSupply();
-        return (supply == 0 ? shares : shares.mulDivDown(totalAssets() + 1, supply + 1e18));
+        return (shares.mulDivDown(totalAssets() + 1, supply + 1e18));
     }
 
     // Preview of the amount of balancerLPT required to mint `shares` of stkSWIV
@@ -87,7 +87,7 @@ contract stkSWIV is ERC20 {
     function previewMint(uint256 shares) public view virtual returns (uint256 assets) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return (supply == 0 ? shares : shares.mulDivUp(totalAssets() + 1, supply + 1e18));
+        return (shares.mulDivUp(totalAssets() + 1, supply + 1e18));
     }
 
     // Preview of the amount of balancerLPT received from redeeming `shares` of stkSWIV
@@ -110,7 +110,7 @@ contract stkSWIV is ERC20 {
     function previewWithdraw(uint256 assets) public view virtual returns (uint256 shares) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
 
-        return (supply == 0 ? assets : assets.mulDivUp(supply + 1e18, totalAssets() + 1));
+        return (assets.mulDivUp(supply + 1e18, totalAssets() + 1));
     }
 
     // Maximum amount a given receiver can mint
