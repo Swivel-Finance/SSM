@@ -35,9 +35,9 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
-    constructor (IVault v, ERC20 s, ERC20 b, bytes32 p) ERC20("Staked SWIV", "stkSWIV", 18) {
-        balancerVault = v;
+    constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV", "stkSWIV", 18) {
         SWIV = s;
+        balancerVault = v;
         balancerLPT = b;
         balancerPoolID = p;
         admin = msg.sender;
