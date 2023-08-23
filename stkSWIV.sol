@@ -35,7 +35,7 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
-    constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV", "stkSWIV", 18) {
+    constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", 36) {
         SWIV = s;
         balancerVault = v;
         balancerLPT = b;
@@ -44,25 +44,30 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.approve(SWIV, address(balancerLPT), type(uint256).max);
     }
 
+    function totalAssets() public view returns (uint256 assets) {
+        return (balancerLPT.balanceOf(address(this)));
+    }
+
     // The number of SWIV/ETH balancer shares owned / the stkSWIV total supply
-    // Conversion of 1 stkSWIV share to an amount of SWIV/ETH balancer shares (scaled to 1e26) (starts at 1:1e26)
+    // Conversion of 1 stkSWIV share to an amount of SWIV/ETH balancer shares (scaled to 1e18) (starts at 1:1e18)
+    // Buffered by 1e18 to avoid 4626 inflation attacks -- https://ethereum-magicians.org/t/address-eip-4626-inflation-attacks-with-virtual-shares-and-assets/12677
     // @returns: the exchange rate
     function exchangeRateCurrent() public view returns (uint256) {
-        return ((SWIV.balanceOf(address(this)) * 1e26) / this.totalSupply());
+        return (this.totalSupply() + 1e18 / totalAssets() + 1);
     }
 
     // Conversion of amount of SWIV/ETH balancer assets to stkSWIV shares
     // @param: assets - amount of SWIV/ETH balancer pool tokens
     // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
-        return ((assets * 1e26) / exchangeRateCurrent());
+        return (assets) * exchangeRateCurrent();
     }
 
     // Conversion of amount of stkSWIV shares to SWIV/ETH balancer assets
     // @param: shares - amount of stkSWIV shares
     // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
-        return ((shares * exchangeRateCurrent()) / 1e26);
+        return (shares / exchangeRateCurrent());
     }
 
     // Maximum amount a given receiver can mint
