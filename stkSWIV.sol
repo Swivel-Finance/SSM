@@ -21,6 +21,8 @@ contract stkSWIV is ERC20 {
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
     uint256 public cooldownLength = 2 weeks;
+    // The window to withdraw after cooldown
+    uint256 public withdrawalWindow = 1 weeks;
     // Mapping of user address -> unix timestamp for cooldown
     mapping (address => uint256) cooldownTime;
     // Mapping of user address -> amount of balancerLPT assets to be withdrawn
@@ -77,6 +79,38 @@ contract stkSWIV is ERC20 {
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
         uint256 supply = this.totalSupply();
         return supply == 0 ? shares : shares.mulDivDown(totalAssets() + 1, supply + 1e18);
+    }
+
+    // Preview of the amount of balancerLPT required to mint `shares` of stkSWIV
+    // @param: shares - amount of stkSWIV shares
+    // @returns: assets the amount of balancerLPT tokens required
+    function previewMint(uint256 shares) public view virtual returns (uint256 assets) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivUp(totalAssets() + 1, supply + 1e18);
+    }
+
+    // Preview of the amount of balancerLPT received from redeeming `shares` of stkSWIV
+    // @param: shares - amount of stkSWIV shares
+    // @returns: assets the amount of balancerLPT tokens received
+    function previewRedeem(uint256 shares) public view virtual returns (uint256 assets) {
+        return convertToAssets(shares);
+    }
+
+    // Preview of the amount of stkSWIV received from depositing `assets` of balancerLPT
+    // @param: assets - amount of balancerLPT tokens
+    // @returns: shares the amount of stkSWIV shares received
+    function previewDeposit(uint256 assets) public view virtual returns (uint256 shares) {
+        return convertToShares(assets);
+    }
+
+    // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
+    // @param: assets - amount of balancerLPT tokens
+    // @returns: shares the amount of stkSWIV shares required
+    function previewWithdraw(uint256 assets) public view virtual returns (uint256 shares) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivUp(supply + 1e18, totalAssets() + 1);
     }
 
     // Maximum amount a given receiver can mint
@@ -158,7 +192,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
@@ -218,7 +252,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
@@ -300,7 +334,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
@@ -399,7 +433,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
