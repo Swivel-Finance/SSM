@@ -44,6 +44,10 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.approve(SWIV, address(balancerLPT), type(uint256).max);
     }
 
+    function asset() public view returns (address) {
+        return (address(balancerLPT));
+    }
+
     function totalAssets() public view returns (uint256 assets) {
         return (balancerLPT.balanceOf(address(this)));
     }
