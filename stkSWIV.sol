@@ -3,9 +3,12 @@ pragma solidity >= 0.8.4;
 
 import './ERC/SolmateERC20.sol';
 import './Utils/SafeTransferLib.sol';
+import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
 
 contract stkSWIV is ERC20 {
+    using FixedPointMathLib for uint256;
+
     // The Swivel Multisig (or should be)
     address public admin;
     // The Swivel Token
@@ -64,14 +67,18 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of SWIV/ETH balancer pool tokens
     // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
-        return (assets) * exchangeRateCurrent();
+        uint256 supply = this.totalSupply();
+        return (supply == 0 ? assets : assets.mulDivDown(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
     // Conversion of amount of stkSWIV shares to SWIV/ETH balancer assets
     // @param: shares - amount of stkSWIV shares
     // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
-        return (shares / exchangeRateCurrent());
+        uint256 supply = this.totalSupply();
+        return supply == 0 ? shares : shares.mulDivDown(totalAssets() + 1, supply + 1e18);
+    }
+    
     }
 
     // Maximum amount a given receiver can mint
