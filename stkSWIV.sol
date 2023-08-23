@@ -41,6 +41,7 @@ contract stkSWIV is ERC20 {
         balancerLPT = b;
         balancerPoolID = p;
         admin = msg.sender;
+        SafeTransferLib.approve(SWIV, address(balancerLPT), type(uint256).max);
     }
 
     // The number of SWIV/ETH balancer shares owned / the stkSWIV total supply
