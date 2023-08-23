@@ -78,8 +78,6 @@ contract stkSWIV is ERC20 {
         uint256 supply = this.totalSupply();
         return supply == 0 ? shares : shares.mulDivDown(totalAssets() + 1, supply + 1e18);
     }
-    
-    }
 
     // Maximum amount a given receiver can mint
     // @param: receiver - address of the receiver
