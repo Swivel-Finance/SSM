@@ -27,6 +27,8 @@ contract stkSWIV is ERC20 {
     mapping (address => uint256) cooldownTime;
     // Mapping of user address -> amount of balancerLPT assets to be withdrawn
     mapping (address => uint256) cooldownAmount;
+    // Determines whether the contract is paused or not
+    bool public paused;
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -173,7 +175,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of balancerLPT tokens withdrawn
-    function redeem(uint256 shares, address receiver, address owner) public returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner) Unpaused() public returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
         // Get the cooldown time
@@ -233,7 +235,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of stkSWIV shares withdrawn
-    function withdraw(uint256 assets, address receiver, address owner) public returns (uint256) {
+    function withdraw(uint256 assets, address receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert assets to shares
         uint256 shares = convertToShares(assets);
         // Get the cooldown time
@@ -325,7 +327,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of SWIV tokens withdrawn
-    function redeemZap(uint256 shares, address payable receiver, address owner) public returns (uint256) {
+    function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
         // Get the cooldown time
@@ -378,7 +380,7 @@ contract stkSWIV is ERC20 {
         cooldownAmount[msg.sender] = 0;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
-        
+
         return (assets);
     }
 
@@ -435,7 +437,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of stkSWIV shares burnt
-    function withdrawZap(uint256 assets, address payable receiver, address owner) public returns (uint256) {
+    function withdrawZap(uint256 assets, address payable receiver, address owner) Unpaused() public returns (uint256) {
         // Convert assets to shares
         uint256 shares = convertToShares(assets);
         // Get the cooldown time
@@ -518,9 +520,20 @@ contract stkSWIV is ERC20 {
         admin = _admin;
     }
 
+    // Pauses all withdrawing
+    function pause() Authorized(admin) public {
+        paused = true;
+    }
+
     // Authorized modifier
     modifier Authorized(address) {
         require(msg.sender == admin || msg.sender == address(this), "Not authorized");
+        _;
+    }
+
+    // Unpaused modifier
+    modifier Unpaused() {
+        require(!paused, "Paused");
         _;
     }
 }
