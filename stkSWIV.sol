@@ -283,7 +283,6 @@ contract stkSWIV is ERC20 {
         uint256 assets = convertToAssets(shares);
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
-
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData;
         assetData[0] = IAsset(address(SWIV));
@@ -303,7 +302,6 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Mint shares to receiver
         _mint(receiver, shares);
-
         // If there is any leftover SWIV, transfer it to the msg.sender
         uint256 swivBalance = SWIV.balanceOf(address(this));
         if (swivBalance > 0) {
@@ -315,7 +313,6 @@ contract stkSWIV is ERC20 {
             // Transfer the ETH to the receiver
             payable(msg.sender).transfer(address(this).balance);
         }
-
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
 
@@ -381,7 +378,7 @@ contract stkSWIV is ERC20 {
         cooldownAmount[msg.sender] = 0;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
-
+        
         return (assets);
     }
 
@@ -415,7 +412,6 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Mint shares to receiver
         _mint(receiver, shares);
-
         // If there is any leftover SWIV, transfer it to the msg.sender
         uint256 swivBalance = SWIV.balanceOf(address(this));
         if (swivBalance > 0) {
@@ -427,7 +423,6 @@ contract stkSWIV is ERC20 {
             // Transfer the ETH to the receiver
             payable(msg.sender).transfer(address(this).balance);
         }
-
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
 
