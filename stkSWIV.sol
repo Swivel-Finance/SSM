@@ -3,9 +3,12 @@ pragma solidity >= 0.8.4;
 
 import './ERC/SolmateERC20.sol';
 import './Utils/SafeTransferLib.sol';
+import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
 
 contract stkSWIV is ERC20 {
+    using FixedPointMathLib for uint256;
+
     // The Swivel Multisig (or should be)
     address public admin;
     // The Swivel Token
@@ -18,6 +21,8 @@ contract stkSWIV is ERC20 {
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
     uint256 public cooldownLength = 2 weeks;
+    // The window to withdraw after cooldown
+    uint256 public withdrawalWindow = 1 weeks;
     // Mapping of user address -> unix timestamp for cooldown
     mapping (address => uint256) cooldownTime;
     // Mapping of user address -> amount of balancerLPT assets to be withdrawn
@@ -35,7 +40,7 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
-    constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV", "stkSWIV", 18) {
+    constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
         balancerVault = v;
         balancerLPT = b;
@@ -44,32 +49,75 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.approve(SWIV, address(balancerLPT), type(uint256).max);
     }
 
+    function asset() public view returns (address) {
+        return (address(balancerLPT));
+    }
+
+    function totalAssets() public view returns (uint256 assets) {
+        return (balancerLPT.balanceOf(address(this)));
+    }
+
     // The number of SWIV/ETH balancer shares owned / the stkSWIV total supply
-    // Conversion of 1 stkSWIV share to an amount of SWIV/ETH balancer shares (scaled to 1e26) (starts at 1:1e26)
+    // Conversion of 1 stkSWIV share to an amount of SWIV/ETH balancer shares (scaled to 1e18) (starts at 1:1e18)
+    // Buffered by 1e18 to avoid 4626 inflation attacks -- https://ethereum-magicians.org/t/address-eip-4626-inflation-attacks-with-virtual-shares-and-assets/12677
     // @returns: the exchange rate
     function exchangeRateCurrent() public view returns (uint256) {
-        return ((SWIV.balanceOf(address(this)) * 1e26) / this.totalSupply());
+        return (this.totalSupply() + 1e18 / totalAssets() + 1);
     }
 
     // Conversion of amount of SWIV/ETH balancer assets to stkSWIV shares
     // @param: assets - amount of SWIV/ETH balancer pool tokens
     // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
-        return ((assets * 1e26) / exchangeRateCurrent());
+        uint256 supply = this.totalSupply();
+        return (assets.mulDivDown(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
     // Conversion of amount of stkSWIV shares to SWIV/ETH balancer assets
     // @param: shares - amount of stkSWIV shares
     // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
-        return ((shares * exchangeRateCurrent()) / 1e26);
+        uint256 supply = this.totalSupply();
+        return (shares.mulDivDown(totalAssets() + 1, supply + 1e18));
+    }
+
+    // Preview of the amount of balancerLPT required to mint `shares` of stkSWIV
+    // @param: shares - amount of stkSWIV shares
+    // @returns: assets the amount of balancerLPT tokens required
+    function previewMint(uint256 shares) public view virtual returns (uint256 assets) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return (shares.mulDivUp(totalAssets() + 1, supply + 1e18));
+    }
+
+    // Preview of the amount of balancerLPT received from redeeming `shares` of stkSWIV
+    // @param: shares - amount of stkSWIV shares
+    // @returns: assets the amount of balancerLPT tokens received
+    function previewRedeem(uint256 shares) public view virtual returns (uint256 assets) {
+        return (convertToAssets(shares));
+    }
+
+    // Preview of the amount of stkSWIV received from depositing `assets` of balancerLPT
+    // @param: assets - amount of balancerLPT tokens
+    // @returns: shares the amount of stkSWIV shares received
+    function previewDeposit(uint256 assets) public view virtual returns (uint256 shares) {
+        return (convertToShares(assets));
+    }
+
+    // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
+    // @param: assets - amount of balancerLPT tokens
+    // @returns: shares the amount of stkSWIV shares required
+    function previewWithdraw(uint256 assets) public view virtual returns (uint256 shares) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return (assets.mulDivUp(supply + 1e18, totalAssets() + 1));
     }
 
     // Maximum amount a given receiver can mint
     // @param: receiver - address of the receiver
     // @returns: the maximum amount of stkSWIV shares
     function maxMint(address receiver) public pure returns (uint256 maxShares) {
-        return type(uint256).max;
+        return (type(uint256).max);
     }
 
     // Maximum amount a given owner can redeem
@@ -90,14 +138,13 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @returns: the maximum amount of balancerLPT assets
     function maxDeposit(address receiver) public pure returns (uint256 maxAssets) {
-        return type(uint256).max;
+        return (type(uint256).max);
     }
 
     // Queues `amount` of balancerLPT assets to be withdrawn after the cooldown period
     // @param: amount - amount of balancerLPT assets to be withdrawn
     // @returns: the total amount of balancerLPT assets to be withdrawn
     function cooldown(uint256 amount) public returns (uint256) {
-
         // Require the total amount to be < balanceOf
         if (cooldownAmount[msg.sender] + amount > balanceOf[msg.sender]) {
             revert Exception(3, cooldownAmount[msg.sender] + amount, balanceOf[msg.sender], msg.sender, address(0));
@@ -144,7 +191,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
@@ -204,7 +251,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
@@ -286,7 +333,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
@@ -385,7 +432,7 @@ contract stkSWIV is ERC20 {
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
         }
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0) {
+        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the cooldown amount is greater than the assets, revert
