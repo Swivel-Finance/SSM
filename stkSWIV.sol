@@ -69,7 +69,6 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of SWIV/ETH balancer pool tokens
     // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
-        uint256 supply = this.totalSupply();
         return (assets.mulDivDown(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
@@ -77,17 +76,14 @@ contract stkSWIV is ERC20 {
     // @param: shares - amount of stkSWIV shares
     // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
-        uint256 supply = this.totalSupply();
-        return (shares.mulDivDown(totalAssets() + 1, supply + 1e18));
+        return (shares.mulDivDown(totalAssets() + 1, this.totalSupply() + 1e18));
     }
 
     // Preview of the amount of balancerLPT required to mint `shares` of stkSWIV
     // @param: shares - amount of stkSWIV shares
     // @returns: assets the amount of balancerLPT tokens required
     function previewMint(uint256 shares) public view virtual returns (uint256 assets) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return (shares.mulDivUp(totalAssets() + 1, supply + 1e18));
+        return (shares.mulDivUp(totalAssets() + 1, this.totalSupply() + 1e18));
     }
 
     // Preview of the amount of balancerLPT received from redeeming `shares` of stkSWIV
@@ -108,9 +104,7 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of balancerLPT tokens
     // @returns: shares the amount of stkSWIV shares required
     function previewWithdraw(uint256 assets) public view virtual returns (uint256 shares) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return (assets.mulDivUp(supply + 1e18, totalAssets() + 1));
+        return (assets.mulDivUp(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
     // Maximum amount a given receiver can mint
@@ -309,6 +303,19 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Mint shares to receiver
         _mint(receiver, shares);
+
+        // If there is any leftover SWIV, transfer it to the receiver
+        uint256 swivBalance = SWIV.balanceOf(address(this));
+        if (swivBalance > 0) {
+            // Transfer the SWIV to the receiver
+            SafeTransferLib.transfer(SWIV, receiver, swivBalance);
+        }
+        // If there is any leftover ETH, transfer it to the receiver
+        if (address(this).balance > 0) {
+            // Transfer the ETH to the receiver
+            payable(receiver).transfer(address(this).balance);
+        }
+
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
 
@@ -408,6 +415,19 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Mint shares to receiver
         _mint(receiver, shares);
+
+        // If there is any leftover SWIV, transfer it to the receiver
+        uint256 swivBalance = SWIV.balanceOf(address(this));
+        if (swivBalance > 0) {
+            // Transfer the SWIV to the receiver
+            SafeTransferLib.transfer(SWIV, receiver, swivBalance);
+        }
+        // If there is any leftover ETH, transfer it to the receiver
+        if (address(this).balance > 0) {
+            // Transfer the ETH to the receiver
+            payable(receiver).transfer(address(this).balance);
+        }
+
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
 
