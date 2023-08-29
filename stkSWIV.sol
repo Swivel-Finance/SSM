@@ -304,16 +304,16 @@ contract stkSWIV is ERC20 {
         // Mint shares to receiver
         _mint(receiver, shares);
 
-        // If there is any leftover SWIV, transfer it to the receiver
+        // If there is any leftover SWIV, transfer it to the msg.sender
         uint256 swivBalance = SWIV.balanceOf(address(this));
         if (swivBalance > 0) {
             // Transfer the SWIV to the receiver
-            SafeTransferLib.transfer(SWIV, receiver, swivBalance);
+            SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
         }
-        // If there is any leftover ETH, transfer it to the receiver
+        // If there is any leftover ETH, transfer it to the msg.sender
         if (address(this).balance > 0) {
             // Transfer the ETH to the receiver
-            payable(receiver).transfer(address(this).balance);
+            payable(msg.sender).transfer(address(this).balance);
         }
 
         // Emit deposit event
@@ -416,16 +416,16 @@ contract stkSWIV is ERC20 {
         // Mint shares to receiver
         _mint(receiver, shares);
 
-        // If there is any leftover SWIV, transfer it to the receiver
+        // If there is any leftover SWIV, transfer it to the msg.sender
         uint256 swivBalance = SWIV.balanceOf(address(this));
         if (swivBalance > 0) {
             // Transfer the SWIV to the receiver
-            SafeTransferLib.transfer(SWIV, receiver, swivBalance);
+            SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
         }
-        // If there is any leftover ETH, transfer it to the receiver
+        // If there is any leftover ETH, transfer it to the msg.sender
         if (address(this).balance > 0) {
             // Transfer the ETH to the receiver
-            payable(receiver).transfer(address(this).balance);
+            payable(msg.sender).transfer(address(this).balance);
         }
 
         // Emit deposit event
