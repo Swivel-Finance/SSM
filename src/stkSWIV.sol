@@ -24,9 +24,9 @@ contract stkSWIV is ERC20 {
     // The window to withdraw after cooldown
     uint256 public withdrawalWindow = 1 weeks;
     // Mapping of user address -> unix timestamp for cooldown
-    mapping (address => uint256) cooldownTime;
+    mapping (address => uint256) public cooldownTime;
     // Mapping of user address -> amount of balancerLPT assets to be withdrawn
-    mapping (address => uint256) cooldownAmount;
+    mapping (address => uint256) public cooldownAmount;
     // Determines whether the contract is paused or not
     bool public paused;
 
@@ -140,17 +140,18 @@ contract stkSWIV is ERC20 {
     // Queues `amount` of balancerLPT assets to be withdrawn after the cooldown period
     // @param: amount - amount of balancerLPT assets to be withdrawn
     // @returns: the total amount of balancerLPT assets to be withdrawn
-    function cooldown(uint256 amount) public returns (uint256) {
+    function cooldown(uint256 assets) public returns (uint256) {
+        uint256 shares = convertToShares(assets);
         // Require the total amount to be < balanceOf
-        if (cooldownAmount[msg.sender] + amount > balanceOf[msg.sender]) {
-            revert Exception(3, cooldownAmount[msg.sender] + amount, balanceOf[msg.sender], msg.sender, address(0));
+        if (cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
+            revert Exception(3, cooldownAmount[msg.sender] + shares, balanceOf[msg.sender], msg.sender, address(0));
         }
         // Reset cooldown time
         cooldownTime[msg.sender] = block.timestamp + cooldownLength;
         // Add the amount;
-        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] + amount;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] + shares;
 
-        return(cooldownAmount[msg.sender] + amount);
+        return(convertToAssets(cooldownAmount[msg.sender]) + assets);
     }
 
     // Mints `shares` to `receiver` and transfers `assets` of balancerLPT tokens from `msg.sender`
@@ -159,7 +160,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of balancerLPT tokens deposited
     function mint(uint256 shares, address receiver) public payable returns (uint256) {
         // Convert shares to assets
-        uint256 assets = convertToAssets(shares);
+        uint256 assets = previewMint(shares);
         // Transfer assets of balancer LP tokens from sender to this contract
         SafeTransferLib.transferFrom(balancerLPT, msg.sender, address(this), assets);
         // Mint shares to receiver
@@ -177,7 +178,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of balancerLPT tokens withdrawn
     function redeem(uint256 shares, address receiver, address owner) Unpaused() public returns (uint256) {
         // Convert shares to assets
-        uint256 assets = convertToAssets(shares);
+        uint256 assets = previewRedeem(shares);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -190,9 +191,9 @@ contract stkSWIV is ERC20 {
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
-        // If the cooldown amount is greater than the assets, revert
+        // If the redeemed shares is greater than the cooldown amount, revert
         uint256 cAmount = cooldownAmount[msg.sender];
-        if (cAmount > assets) {
+        if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
         // If the shares are greater than the balance of the owner, revert
@@ -219,9 +220,9 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares minted
     function deposit(uint256 assets, address receiver) public returns (uint256) {
         // Convert assets to shares          
-        uint256 shares = convertToShares(assets);
+        uint256 shares = previewDeposit(assets);
         // Transfer assets of balancer LP tokens from sender to this contract
-        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);        
+        SafeTransferLib.transferFrom(balancerLPT, msg.sender, address(this), assets);        
         // Mint shares to receiver
         _mint(receiver, shares);
         // Emit deposit event
@@ -237,7 +238,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares withdrawn
     function withdraw(uint256 assets, address receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert assets to shares
-        uint256 shares = convertToShares(assets);
+        uint256 shares = previewWithdraw(assets);(assets);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -250,9 +251,9 @@ contract stkSWIV is ERC20 {
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
-        // If the cooldown amount is greater than the assets, revert
+        // If the redeemed shares is greater than the cooldown amount, revert
         uint256 cAmount = cooldownAmount[msg.sender];
-        if (cAmount > assets) {
+        if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
         // If the shares are greater than the balance of the owner, revert
@@ -282,7 +283,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of SWIV tokens deposited
     function mintZap(uint256 shares, address receiver) public payable returns (uint256) {
         // Convert shares to assets
-        uint256 assets = convertToAssets(shares);
+        uint256 assets = previewMint(shares);
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
@@ -329,7 +330,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of SWIV tokens withdrawn
     function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert shares to assets
-        uint256 assets = convertToAssets(shares);
+        uint256 assets = previewRedeem(shares);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -342,9 +343,9 @@ contract stkSWIV is ERC20 {
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
-        // If the cooldown amount is greater than the assets, revert
+        // If the redeemed shares is greater than the cooldown amount, revert
         uint256 cAmount = cooldownAmount[msg.sender];
-        if (cAmount > assets) {
+        if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
         // If the shares are greater than the balance of the owner, revert
@@ -392,7 +393,7 @@ contract stkSWIV is ERC20 {
     function depositZap(uint256 assets, address receiver) public payable returns (uint256) {
 
         // Convert assets to shares
-        uint256 shares = convertToShares(assets);
+        uint256 shares = previewDeposit(assets);
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);    
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
@@ -439,7 +440,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares burnt
     function withdrawZap(uint256 assets, address payable receiver, address owner) Unpaused() public returns (uint256) {
         // Convert assets to shares
-        uint256 shares = convertToShares(assets);
+        uint256 shares = previewWithdraw(assets);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -452,9 +453,9 @@ contract stkSWIV is ERC20 {
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
-        // If the cooldown amount is greater than the assets, revert
+        // If the redeemed shares is greater than the cooldown amount, revert
         uint256 cAmount = cooldownAmount[msg.sender];
-        if (cAmount > assets) {
+        if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
         // If the shares are greater than the balance of the owner, revert
