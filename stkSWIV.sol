@@ -27,6 +27,8 @@ contract stkSWIV is ERC20 {
     mapping (address => uint256) cooldownTime;
     // Mapping of user address -> amount of balancerLPT assets to be withdrawn
     mapping (address => uint256) cooldownAmount;
+    // Determines whether the contract is paused or not
+    bool public paused;
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -69,7 +71,6 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of SWIV/ETH balancer pool tokens
     // @returns: the amount of stkSWIV shares
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
-        uint256 supply = this.totalSupply();
         return (assets.mulDivDown(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
@@ -77,17 +78,14 @@ contract stkSWIV is ERC20 {
     // @param: shares - amount of stkSWIV shares
     // @returns: the amount of SWIV/ETH balancer pool tokens
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
-        uint256 supply = this.totalSupply();
-        return (shares.mulDivDown(totalAssets() + 1, supply + 1e18));
+        return (shares.mulDivDown(totalAssets() + 1, this.totalSupply() + 1e18));
     }
 
     // Preview of the amount of balancerLPT required to mint `shares` of stkSWIV
     // @param: shares - amount of stkSWIV shares
     // @returns: assets the amount of balancerLPT tokens required
     function previewMint(uint256 shares) public view virtual returns (uint256 assets) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return (shares.mulDivUp(totalAssets() + 1, supply + 1e18));
+        return (shares.mulDivUp(totalAssets() + 1, this.totalSupply() + 1e18));
     }
 
     // Preview of the amount of balancerLPT received from redeeming `shares` of stkSWIV
@@ -108,9 +106,7 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of balancerLPT tokens
     // @returns: shares the amount of stkSWIV shares required
     function previewWithdraw(uint256 assets) public view virtual returns (uint256 shares) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return (assets.mulDivUp(supply + 1e18, totalAssets() + 1));
+        return (assets.mulDivUp(this.totalSupply() + 1e18, totalAssets() + 1));
     }
 
     // Maximum amount a given receiver can mint
@@ -179,7 +175,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of balancerLPT tokens withdrawn
-    function redeem(uint256 shares, address receiver, address owner) public returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner) Unpaused() public returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
         // Get the cooldown time
@@ -239,7 +235,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of stkSWIV shares withdrawn
-    function withdraw(uint256 assets, address receiver, address owner) public returns (uint256) {
+    function withdraw(uint256 assets, address receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert assets to shares
         uint256 shares = convertToShares(assets);
         // Get the cooldown time
@@ -289,7 +285,6 @@ contract stkSWIV is ERC20 {
         uint256 assets = convertToAssets(shares);
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
-
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData;
         assetData[0] = IAsset(address(SWIV));
@@ -309,6 +304,17 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Mint shares to receiver
         _mint(receiver, shares);
+        // If there is any leftover SWIV, transfer it to the msg.sender
+        uint256 swivBalance = SWIV.balanceOf(address(this));
+        if (swivBalance > 0) {
+            // Transfer the SWIV to the receiver
+            SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
+        }
+        // If there is any leftover ETH, transfer it to the msg.sender
+        if (address(this).balance > 0) {
+            // Transfer the ETH to the receiver
+            payable(msg.sender).transfer(address(this).balance);
+        }
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
 
@@ -321,7 +327,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of SWIV tokens withdrawn
-    function redeemZap(uint256 shares, address payable receiver, address owner) public returns (uint256) {
+    function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert shares to assets
         uint256 assets = convertToAssets(shares);
         // Get the cooldown time
@@ -408,6 +414,17 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Mint shares to receiver
         _mint(receiver, shares);
+        // If there is any leftover SWIV, transfer it to the msg.sender
+        uint256 swivBalance = SWIV.balanceOf(address(this));
+        if (swivBalance > 0) {
+            // Transfer the SWIV to the receiver
+            SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
+        }
+        // If there is any leftover ETH, transfer it to the msg.sender
+        if (address(this).balance > 0) {
+            // Transfer the ETH to the receiver
+            payable(msg.sender).transfer(address(this).balance);
+        }
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
 
@@ -420,7 +437,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: the amount of stkSWIV shares burnt
-    function withdrawZap(uint256 assets, address payable receiver, address owner) public returns (uint256) {
+    function withdrawZap(uint256 assets, address payable receiver, address owner) Unpaused() public returns (uint256) {
         // Convert assets to shares
         uint256 shares = convertToShares(assets);
         // Get the cooldown time
@@ -503,9 +520,20 @@ contract stkSWIV is ERC20 {
         admin = _admin;
     }
 
+    // Pauses all withdrawing
+    function pause() Authorized(admin) public {
+        paused = true;
+    }
+
     // Authorized modifier
     modifier Authorized(address) {
         require(msg.sender == admin || msg.sender == address(this), "Not authorized");
+        _;
+    }
+
+    // Unpaused modifier
+    modifier Unpaused() {
+        require(!paused, "Paused");
         _;
     }
 }
