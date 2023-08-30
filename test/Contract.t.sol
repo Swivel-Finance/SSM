@@ -2,6 +2,9 @@
 pragma solidity ^0.8.16;
 
 import "forge-std/Test.sol";
+import "forge-std/console.sol";
+
+
 import {stkSWIV} from 'src/stkSWIV.sol';
 import {ERC20} from 'src/ERC/SolmateERC20.sol';
 import {IVault} from 'src/Interfaces/IVault.sol';
@@ -37,7 +40,8 @@ contract SSMTest is Test {
     }
 
     function testExample() public {
-        assertTrue(true);
+        console.log("BALANCE OF USER: ");
         console.log(BAL.balanceOf(Constants.userPublicKey));
+        assertTrue(true);
     }
 }
