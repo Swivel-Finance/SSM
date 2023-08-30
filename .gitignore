@@ -9,6 +9,7 @@ out/
 
 # Foundry files
 out/
+lib/
 solidity-files-cache.json
 .gas-snapshot
 broadcast/
@@ -19,5 +20,3 @@ scratch/
 
 # Gas reports
 *.report
-
-lib/
