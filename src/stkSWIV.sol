@@ -537,8 +537,8 @@ contract stkSWIV is ERC20 {
     }
 
     // Pauses all withdrawing
-    function pause() Authorized(admin) public {
-        paused = true;
+    function pause(bool b) Authorized(admin) public {
+        paused = b;
     }
 
     // Authorized modifier
