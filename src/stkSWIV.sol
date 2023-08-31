@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >= 0.8.4;
-
+import "forge-std/console.sol";
 import './ERC/SolmateERC20.sol';
 import './Utils/SafeTransferLib.sol';
 import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
+import './Interfaces/IWETH.sol';
 
 contract stkSWIV is ERC20 {
     using FixedPointMathLib for uint256;
@@ -29,6 +30,8 @@ contract stkSWIV is ERC20 {
     mapping (address => uint256) public cooldownAmount;
     // Determines whether the contract is paused or not
     bool public paused;
+    // The WETH address
+    IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -42,13 +45,19 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
+    event TestException(uint256, address, string);
+
     constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
         balancerVault = v;
         balancerLPT = b;
         balancerPoolID = p;
         admin = msg.sender;
-        SafeTransferLib.approve(SWIV, address(balancerLPT), type(uint256).max);
+        SafeTransferLib.approve(SWIV, address(balancerVault), type(uint256).max);
+        SafeTransferLib.approve(ERC20(address(WETH)), address(balancerVault), type(uint256).max);
+    }
+
+    fallback() external payable {
     }
 
     function asset() public view returns (address) {
@@ -396,13 +405,18 @@ contract stkSWIV is ERC20 {
         uint256 shares = previewDeposit(assets);
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);    
-        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData;
-        assetData[0] = IAsset(address(SWIV));
-        assetData[1] = IAsset(address(0));
+        // Wrap msg.value into WETH
+        WETH.deposit{value: msg.value}();
 
-        uint256[] memory amountData;
-        amountData[0] = assets;
+        emit TestException(WETH.balanceOf((address(this))), receiver, "test");
+
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(SWIV));
+        assetData[1] = IAsset(address(WETH));
+
+        uint256[] memory amountData = new uint256[](2);
+        amountData[0] = 1;
         amountData[1] = msg.value;
 
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
@@ -411,25 +425,26 @@ contract stkSWIV is ERC20 {
             userData: new bytes(0),
             fromInternalBalance: false
         });
+        
         // Join the balancer pool using the request struct
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
-        // Mint shares to receiver
-        _mint(receiver, shares);
-        // If there is any leftover SWIV, transfer it to the msg.sender
-        uint256 swivBalance = SWIV.balanceOf(address(this));
-        if (swivBalance > 0) {
-            // Transfer the SWIV to the receiver
-            SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
-        }
-        // If there is any leftover ETH, transfer it to the msg.sender
-        if (address(this).balance > 0) {
-            // Transfer the ETH to the receiver
-            payable(msg.sender).transfer(address(this).balance);
-        }
-        // Emit deposit event
-        emit Deposit(msg.sender, receiver, assets, shares);
+        // // Mint shares to receiver
+        // _mint(receiver, shares);
+        // // If there is any leftover SWIV, transfer it to the msg.sender
+        // uint256 swivBalance = SWIV.balanceOf(address(this));
+        // if (swivBalance > 0) {
+        //     // Transfer the SWIV to the receiver
+        //     SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
+        // }
+        // // If there is any leftover ETH, transfer it to the msg.sender
+        // if (address(this).balance > 0) {
+        //     // Transfer the ETH to the receiver
+        //     payable(msg.sender).transfer(address(this).balance);
+        // }
+        // // Emit deposit event
+        // emit Deposit(msg.sender, receiver, assets, shares);
 
-        return (shares);
+        // return (shares);
     }
 
     // Exits the balancer pool and transfers `assets` of SWIV tokens and the current balance of ETH to `receiver`
@@ -522,8 +537,8 @@ contract stkSWIV is ERC20 {
     }
 
     // Pauses all withdrawing
-    function pause() Authorized(admin) public {
-        paused = true;
+    function pause(bool b) Authorized(admin) public {
+        paused = b;
     }
 
     // Authorized modifier
