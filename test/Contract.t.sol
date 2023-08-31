@@ -20,8 +20,7 @@ contract SSMTest is Test {
     IVault Vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
     ERC20 LPT = ERC20(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
     bytes32 poolID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
-
-    uint256 startingBalance = 100000000000000000000000;
+    uint256 startingBalance = 1923.29 * 2 * 1e18;
 
 function getMappingValue(address targetContract, uint256 mapSlot, address key) public view returns (uint256) {
         bytes32 slotValue = vm.load(targetContract, keccak256(abi.encode(key, mapSlot)));
@@ -41,15 +40,15 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
 
         // Approve SSM to spend BAL Tokens and LPT
         vm.startPrank(Constants.userPublicKey);
-        BAL.approve(address(SSM), type(uint256).max);
-        LPT.approve(address(SSM), type(uint256).max);
+        BAL.approve(address(SSM), type(uint256).max-1);
+        LPT.approve(address(SSM), type(uint256).max-1);
         vm.stopPrank();
     }
 
     function testDeal() public {
         assertEq(BAL.balanceOf(Constants.userPublicKey), startingBalance);
-        assertEq(BAL.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max);
-        assertEq(LPT.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max);
+        assertEq(BAL.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max-1);
+        assertEq(LPT.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max-1);
     }
 
     function testFirstDeposit() public {
@@ -134,5 +133,110 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
+    }
+
+    function testSecondaryDepositWithdraw() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(amount/2);
+        vm.warp(block.timestamp+ SSM.cooldownLength());
+        SSM.withdraw(amount/2, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.deposit(amount + amount/2, Constants.userPublicKey);
+        assertEq(LPT.balanceOf(Constants.userPublicKey), 0);
+        assertEq(SSM.balanceOf(Constants.userPublicKey), startingBalance*1e18);
+    }
+
+    function testSecondaryMintRedeem() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = (startingBalance*1e18) / 2;
+        SSM.mint(amount, Constants.userPublicKey);
+        SSM.cooldown(amount/1e18/2);
+        vm.warp(block.timestamp+ SSM.cooldownLength());
+        SSM.redeem(amount/2, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.mint(amount + amount/2, Constants.userPublicKey);
+        assertEq(LPT.balanceOf(Constants.userPublicKey), 0);
+        assertEq(SSM.balanceOf(Constants.userPublicKey), startingBalance*1e18);
+    }
+    
+    function testPause() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(amount);
+        vm.warp(block.timestamp+ SSM.cooldownLength());
+        vm.stopPrank();
+        SSM.pause(true);
+        vm.startPrank(Constants.userPublicKey);
+        vm.expectRevert(bytes("Paused"));
+        SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
+    }
+
+    function testCooldownTooShort() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(amount);
+        vm.warp(block.timestamp + SSM.cooldownLength() - 100);
+        vm.expectRevert();
+        SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
+    }
+
+    function testCooldownNotEnough() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(amount-1);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        vm.expectRevert();
+        SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
+    }
+
+    function testWithdrawalWindowLength() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(amount);
+        vm.warp(block.timestamp + SSM.cooldownLength() + SSM.withdrawalWindow() + 1);
+        vm.expectRevert();
+        SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
+    }
+
+    function testClearingCooldownTimeOnWithdraw() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.deposit(amount, Constants.userPublicKey);
+
+        SSM.cooldown(amount);
+        assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+
+        SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
+        assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
+    }
+
+    function testClearingCooldownTimeOnRedeem() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = (startingBalance * 1e18) / 2;
+        SSM.mint(amount, Constants.userPublicKey);
+
+        SSM.cooldown(amount/1e18);
+        assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+
+        SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
+        assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
+    }
+
+    function testDepositZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
+        // assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
+        // assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
     }
 }
