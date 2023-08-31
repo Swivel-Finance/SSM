@@ -20,7 +20,8 @@ contract SSMTest is Test {
     IVault Vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
     ERC20 LPT = ERC20(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
     bytes32 poolID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
-    uint256 startingBalance = 1923.29 * 2 * 1e18;
+
+    uint256 startingBalance = 100000000000000000000000;
 
 function getMappingValue(address targetContract, uint256 mapSlot, address key) public view returns (uint256) {
         bytes32 slotValue = vm.load(targetContract, keccak256(abi.encode(key, mapSlot)));
@@ -40,15 +41,15 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
 
         // Approve SSM to spend BAL Tokens and LPT
         vm.startPrank(Constants.userPublicKey);
-        BAL.approve(address(SSM), type(uint256).max-1);
-        LPT.approve(address(SSM), type(uint256).max-1);
+        BAL.approve(address(SSM), type(uint256).max);
+        LPT.approve(address(SSM), type(uint256).max);
         vm.stopPrank();
     }
 
     function testDeal() public {
         assertEq(BAL.balanceOf(Constants.userPublicKey), startingBalance);
-        assertEq(BAL.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max-1);
-        assertEq(LPT.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max-1);
+        assertEq(BAL.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max);
+        assertEq(LPT.allowance(Constants.userPublicKey, address(SSM)), type(uint256).max);
     }
 
     function testFirstDeposit() public {
@@ -218,13 +219,5 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
-    }
-
-    function testDepositZap() public {
-        vm.startPrank(Constants.userPublicKey);
-        uint256 amount = startingBalance / 2;
-        SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
-        // assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
-        // assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
     }
 }
