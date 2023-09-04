@@ -429,7 +429,7 @@ contract stkSWIV is ERC20 {
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
                     assets: assetData,
                     maxAmountsIn: amountData,
-                    userData: abi.encode(1, [assets, msg.value], 0),
+                    userData: abi.encode(1, amountData, 0),
                     fromInternalBalance: false
                 });
     
