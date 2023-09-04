@@ -9,6 +9,8 @@ import {stkSWIV} from 'src/stkSWIV.sol';
 import {ERC20} from 'src/ERC/SolmateERC20.sol';
 import {IVault} from 'src/Interfaces/IVault.sol';
 import {IERC20} from 'src/Interfaces/IERC20.sol';
+import {IQuery} from 'src/Interfaces/IQuery.sol';
+import {IWETH} from 'src/Interfaces/IWETH.sol';
 
 import {Constants} from 'test/Constants.sol';
 
@@ -19,14 +21,15 @@ contract SSMTest is Test {
     ERC20 BAL = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
     IVault Vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
     ERC20 LPT = ERC20(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
+    IQuery Query = IQuery(0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5);
+    IWETH WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     bytes32 poolID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
+    uint256 startingBalance = 2000 * 2 * 1e18;
 
-    uint256 startingBalance = 100000000000000000000000;
-
-function getMappingValue(address targetContract, uint256 mapSlot, address key) public view returns (uint256) {
-        bytes32 slotValue = vm.load(targetContract, keccak256(abi.encode(key, mapSlot)));
-            return uint256(slotValue);
-    }
+    function getMappingValue(address targetContract, uint256 mapSlot, address key) public view returns (uint256) {
+            bytes32 slotValue = vm.load(targetContract, keccak256(abi.encode(key, mapSlot)));
+                return uint256(slotValue);
+        }
 
 
     function setUp() public {
@@ -219,5 +222,15 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
+    }
+
+    function testDepositZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
+        assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(BAL.balanceOf(address(SSM)), 0);
+        assertEq(BAL.balanceOf(address(WETH)), 0);
     }
 }

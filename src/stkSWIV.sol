@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >= 0.8.4;
-
+import "forge-std/console.sol";
 import './ERC/SolmateERC20.sol';
 import './Utils/SafeTransferLib.sol';
 import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
+import './Interfaces/IWETH.sol';
+import './Interfaces/IQuery.sol';
 
 contract stkSWIV is ERC20 {
     using FixedPointMathLib for uint256;
@@ -17,6 +19,9 @@ contract stkSWIV is ERC20 {
     ERC20 immutable public balancerLPT;
     // The Static Balancer Vault
     IVault immutable public balancerVault;
+    // The Static Balancer Query Helper
+    IQuery immutable public balancerQuery;
+
     // The Balancer Pool ID
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
@@ -25,10 +30,17 @@ contract stkSWIV is ERC20 {
     uint256 public withdrawalWindow = 1 weeks;
     // Mapping of user address -> unix timestamp for cooldown
     mapping (address => uint256) public cooldownTime;
-    // Mapping of user address -> amount of balancerLPT assets to be withdrawn
+    // Mapping of user address -> amount of stkSWIV shares to be withdrawn
     mapping (address => uint256) public cooldownAmount;
     // Determines whether the contract is paused or not
     bool public paused;
+    // The WETH address
+    IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    uint256 public debuggingUint;
+    string public debuggingString;
+    address public debuggingAddress;
+    bytes32 public debuggingBytes32;
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -42,13 +54,20 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
+    event TestException(uint256, address, string);
+
     constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
-        balancerVault = v;
+        balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
         balancerLPT = b;
         balancerPoolID = p;
+        balancerQuery = IQuery(0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5);
         admin = msg.sender;
-        SafeTransferLib.approve(SWIV, address(balancerLPT), type(uint256).max);
+        SafeTransferLib.approve(SWIV, address(balancerVault), type(uint256).max);
+        SafeTransferLib.approve(ERC20(address(WETH)), address(balancerVault), type(uint256).max);
+    }
+
+    fallback() external payable {
     }
 
     function asset() public view returns (address) {
@@ -100,6 +119,31 @@ contract stkSWIV is ERC20 {
     // @returns: shares the amount of stkSWIV shares received
     function previewDeposit(uint256 assets) public view virtual returns (uint256 shares) {
         return (convertToShares(assets));
+    }
+
+    // Preview the amount of stkSWIV received from zapping and depositing `swivelAmount` of SWIV alongside a proportional amount of ETH
+    // @param: swivelAmount - amount of SWIV tokens
+    // @returns: shares the amount of stkSWIV shares received
+    function previewDepositZap(uint256 swivelAmount) public returns (uint256 shares) {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(SWIV));
+        assetData[1] = IAsset(address(WETH));
+
+        uint256[] memory amountData = new uint256[](2);
+        amountData[0] = swivelAmount;
+        amountData[1] = type(uint256).max;
+
+        IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, amountData, 0), // Todo: Calculate accurate minimumBPT estimate once other blocker is past
+                    fromInternalBalance: false
+                });
+        // Query the pool join to get the bpt out
+        (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+
+        return (convertToShares(bptOut));
     }
 
     // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
@@ -391,29 +435,38 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @returns: the amount of stkSWIV shares minted
     function depositZap(uint256 assets, address receiver) public payable returns (uint256) {
-
-        // Convert assets to shares
-        uint256 shares = previewDeposit(assets);
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);    
+        // Wrap msg.value into WETH
+        WETH.deposit{value: msg.value}();
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData;
+        IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
-        assetData[1] = IAsset(address(0));
+        assetData[1] = IAsset(address(WETH));
 
-        uint256[] memory amountData;
+        uint256[] memory amountData = new uint256[](2);
         amountData[0] = assets;
         amountData[1] = msg.value;
 
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-            assets: assetData,
-            maxAmountsIn: amountData,
-            userData: new bytes(0),
-            fromInternalBalance: false
-        });
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, amountData, 0), // Todo: Calculate accurate minimumBPT estimate once other blocker is past
+                    fromInternalBalance: false
+                });
+        // Query the pool join to get the bpt out
+        (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+
+        requestData.userData = abi.encode(1, amountsIn, bptOut);
         // Join the balancer pool using the request struct
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
-        // Mint shares to receiver
+
+        require (bptOut == balancerLPT.balanceOf(address(this)), "Query and result mismatch");
+
+        // Convert assets to shares
+        uint256 shares = previewDeposit(bptOut);
+
+        // // Mint shares to receiver
         _mint(receiver, shares);
         // If there is any leftover SWIV, transfer it to the msg.sender
         uint256 swivBalance = SWIV.balanceOf(address(this));
@@ -422,9 +475,12 @@ contract stkSWIV is ERC20 {
             SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
         }
         // If there is any leftover ETH, transfer it to the msg.sender
-        if (address(this).balance > 0) {
+        if (WETH.balanceOf(address(this)) > 0) {
             // Transfer the ETH to the receiver
-            payable(msg.sender).transfer(address(this).balance);
+            uint256 wethAmount = WETH.balanceOf(address(this));
+            WETH.withdraw(wethAmount);
+            WETH.transfer(receiver, wethAmount);
+            //payable(msg.sender).transfer(address(this).balance);
         }
         // Emit deposit event
         emit Deposit(msg.sender, receiver, assets, shares);
