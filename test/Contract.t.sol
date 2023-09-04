@@ -20,7 +20,7 @@ contract SSMTest is Test {
     IVault Vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
     ERC20 LPT = ERC20(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
     bytes32 poolID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
-    uint256 startingBalance = 1923.29 * 2 * 1e18;
+    uint256 startingBalance = 2000 * 2 * 1e18;
 
 function getMappingValue(address targetContract, uint256 mapSlot, address key) public view returns (uint256) {
         bytes32 slotValue = vm.load(targetContract, keccak256(abi.encode(key, mapSlot)));

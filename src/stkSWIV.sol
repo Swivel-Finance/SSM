@@ -6,6 +6,7 @@ import './Utils/SafeTransferLib.sol';
 import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
 import './Interfaces/IWETH.sol';
+import './Interfaces/IQuery.sol';
 
 contract stkSWIV is ERC20 {
     using FixedPointMathLib for uint256;
@@ -18,6 +19,9 @@ contract stkSWIV is ERC20 {
     ERC20 immutable public balancerLPT;
     // The Static Balancer Vault
     IVault immutable public balancerVault;
+    // The Static Balancer Query Helper
+    IQuery immutable public balancerQuery;
+
     // The Balancer Pool ID
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
@@ -32,6 +36,11 @@ contract stkSWIV is ERC20 {
     bool public paused;
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    uint256 public debuggingUint;
+    string public debuggingString;
+    address public debuggingAddress;
+    bytes32 public debuggingBytes32;
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -49,9 +58,10 @@ contract stkSWIV is ERC20 {
 
     constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
-        balancerVault = v;
+        balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
         balancerLPT = b;
         balancerPoolID = p;
+        balancerQuery = IQuery(0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5);
         admin = msg.sender;
         SafeTransferLib.approve(SWIV, address(balancerVault), type(uint256).max);
         SafeTransferLib.approve(ERC20(address(WETH)), address(balancerVault), type(uint256).max);
@@ -402,30 +412,27 @@ contract stkSWIV is ERC20 {
     function depositZap(uint256 assets, address receiver) public payable returns (uint256) {
 
         // Convert assets to shares
-        uint256 shares = previewDeposit(assets);
+        uint256 shares = previewDeposit(assets); // assets = 2000000000000000000000
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);    
         // Wrap msg.value into WETH
-        WETH.deposit{value: msg.value}();
-
-        emit TestException(WETH.balanceOf((address(this))), receiver, "test");
-
+        WETH.deposit{value: msg.value}(); // msg.value = 1000000000000000000
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
         assetData[1] = IAsset(address(WETH));
 
         uint256[] memory amountData = new uint256[](2);
-        amountData[0] = 1;
+        amountData[0] = assets;
         amountData[1] = msg.value;
 
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-            assets: assetData,
-            maxAmountsIn: amountData,
-            userData: new bytes(0),
-            fromInternalBalance: false
-        });
-        
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, [assets, msg.value], 0),
+                    fromInternalBalance: false
+                });
+    
         // Join the balancer pool using the request struct
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // // Mint shares to receiver
