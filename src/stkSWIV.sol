@@ -30,7 +30,7 @@ contract stkSWIV is ERC20 {
     uint256 public withdrawalWindow = 1 weeks;
     // Mapping of user address -> unix timestamp for cooldown
     mapping (address => uint256) public cooldownTime;
-    // Mapping of user address -> amount of balancerLPT assets to be withdrawn
+    // Mapping of user address -> amount of stkSWIV shares to be withdrawn
     mapping (address => uint256) public cooldownAmount;
     // Determines whether the contract is paused or not
     bool public paused;
@@ -119,6 +119,31 @@ contract stkSWIV is ERC20 {
     // @returns: shares the amount of stkSWIV shares received
     function previewDeposit(uint256 assets) public view virtual returns (uint256 shares) {
         return (convertToShares(assets));
+    }
+
+    // Preview the amount of stkSWIV received from zapping and depositing `swivelAmount` of SWIV alongside a proportional amount of ETH
+    // @param: swivelAmount - amount of SWIV tokens
+    // @returns: shares the amount of stkSWIV shares received
+    function previewDepositZap(uint256 swivelAmount) public returns (uint256 shares) {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(SWIV));
+        assetData[1] = IAsset(address(WETH));
+
+        uint256[] memory amountData = new uint256[](2);
+        amountData[0] = swivelAmount;
+        amountData[1] = type(uint256).max;
+
+        IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, amountData, 0), // Todo: Calculate accurate minimumBPT estimate once other blocker is past
+                    fromInternalBalance: false
+                });
+        // Query the pool join to get the bpt out
+        (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+
+        return (convertToShares(bptOut));
     }
 
     // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
@@ -410,13 +435,10 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @returns: the amount of stkSWIV shares minted
     function depositZap(uint256 assets, address receiver) public payable returns (uint256) {
-
-        // Convert assets to shares
-        uint256 shares = previewDeposit(assets); // assets = 2000000000000000000000
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);    
         // Wrap msg.value into WETH
-        WETH.deposit{value: msg.value}(); // msg.value = 1000000000000000000
+        WETH.deposit{value: msg.value}();
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
@@ -429,29 +451,41 @@ contract stkSWIV is ERC20 {
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
                     assets: assetData,
                     maxAmountsIn: amountData,
-                    userData: abi.encode(1, [assets, msg.value], 0),
+                    userData: abi.encode(1, amountData, 0), // Todo: Calculate accurate minimumBPT estimate once other blocker is past
                     fromInternalBalance: false
                 });
-    
+        // Query the pool join to get the bpt out
+        (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+
+        requestData.userData = abi.encode(1, amountsIn, bptOut);
         // Join the balancer pool using the request struct
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
-        // // Mint shares to receiver
-        // _mint(receiver, shares);
-        // // If there is any leftover SWIV, transfer it to the msg.sender
-        // uint256 swivBalance = SWIV.balanceOf(address(this));
-        // if (swivBalance > 0) {
-        //     // Transfer the SWIV to the receiver
-        //     SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
-        // }
-        // // If there is any leftover ETH, transfer it to the msg.sender
-        // if (address(this).balance > 0) {
-        //     // Transfer the ETH to the receiver
-        //     payable(msg.sender).transfer(address(this).balance);
-        // }
-        // // Emit deposit event
-        // emit Deposit(msg.sender, receiver, assets, shares);
 
-        // return (shares);
+        require (bptOut == balancerLPT.balanceOf(address(this)), "Query and result mismatch");
+
+        // Convert assets to shares
+        uint256 shares = previewDeposit(bptOut);
+
+        // // Mint shares to receiver
+        _mint(receiver, shares);
+        // If there is any leftover SWIV, transfer it to the msg.sender
+        uint256 swivBalance = SWIV.balanceOf(address(this));
+        if (swivBalance > 0) {
+            // Transfer the SWIV to the receiver
+            SafeTransferLib.transfer(SWIV, msg.sender, swivBalance);
+        }
+        // If there is any leftover ETH, transfer it to the msg.sender
+        if (WETH.balanceOf(address(this)) > 0) {
+            // Transfer the ETH to the receiver
+            uint256 wethAmount = WETH.balanceOf(address(this));
+            WETH.withdraw(wethAmount);
+            WETH.transfer(receiver, wethAmount);
+            //payable(msg.sender).transfer(address(this).balance);
+        }
+        // Emit deposit event
+        emit Deposit(msg.sender, receiver, assets, shares);
+
+        return (shares);
     }
 
     // Exits the balancer pool and transfers `assets` of SWIV tokens and the current balance of ETH to `receiver`
