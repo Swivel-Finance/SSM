@@ -321,7 +321,8 @@ contract stkSWIV is ERC20 {
     //////////////////// ZAP METHODS ////////////////////
 
     // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
-    // Then joins the balancer pool with the SWIV and ETH before minting `shares` to `receiver`
+    // Then joins the balancer pool with the SWIV and ETH before minting minBPT of shares to `receiver`
+    // @notice: The amounts transacted in this method are based on msg.value -- `shares` is the minimum amount of shares to mint
     // @param: shares - minimum amount of stkSWIV shares to mint
     // @param: receiver - address of the receiver
     // @returns: the amount of SWIV tokens deposited
@@ -346,18 +347,23 @@ contract stkSWIV is ERC20 {
                     fromInternalBalance: false
                 });
         // Query the pool join to get the bpt out (assets)
-        (uint256 assets, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+        (uint256 minBPT, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
         // Wrap msg.value into WETH
         WETH.deposit{value: msg.value}();
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), swivAmount); 
         // Encode new userData with queried amountsIn and bptOut
-        requestData.userData = abi.encode(1, amountsIn, assets);
+        requestData.userData = abi.encode(1, amountsIn, minBPT);
         // Join the balancer pool using the request struct
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
-
+        // Calculate expected shares to mint
+        uint256 sharesToMint = previewMint(minBPT);
+        // If the shares to mint is less than the minimum shares, revert
+        if (sharesToMint < shares) {
+            revert Exception(4, sharesToMint, shares, address(0), address(0));
+        }
         // Mint shares to receiver
-        _mint(receiver, shares);
+        _mint(receiver, sharesToMint);
         {
             // If there is any leftover SWIV, transfer it to the msg.sender
             uint256 remainingSWIV = SWIV.balanceOf(address(this));
@@ -376,9 +382,9 @@ contract stkSWIV is ERC20 {
             }
         }
         // Emit deposit event
-        emit Deposit(msg.sender, receiver, assets, shares);
+        emit Deposit(msg.sender, receiver, minBPT, sharesToMint);
 
-        return (assets);
+        return (minBPT);
     }
 
     // Exits the balancer pool and transfers `assets` of SWIV tokens and the current balance of ETH to `receiver`
@@ -388,8 +394,6 @@ contract stkSWIV is ERC20 {
     // @param: owner - address of the owner
     // @returns: the amount of SWIV tokens withdrawn
     function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256) {
-        // Convert shares to assets
-        uint256 assets = previewRedeem(shares);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances

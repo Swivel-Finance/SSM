@@ -236,12 +236,20 @@ contract SSMTest is Test {
 
     function testMintZap() public {
         vm.startPrank(Constants.userPublicKey);
-        uint256 amount = startingBalance*1e18 / 2;
+        uint256 amount = 597377559108214882330512;
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
         console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
         assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
         assertEq(BAL.balanceOf(address(SSM)), 0);
         assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
+
+    function testMintZapTooLittleShares() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 897377559108214882330512;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        vm.expectRevert();
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
     }
 }
