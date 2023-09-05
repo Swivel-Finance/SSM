@@ -360,8 +360,6 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Calculate expected shares to mint
         uint256 sharesToMint = previewMint(minBPT);
-        emit TestException(minBPT, address(this), "minBPT");
-        emit TestException(convertToAssets(convertToShares(minBPT)), address(this), "full circle assets");
         // If the shares to mint is less than the minimum shares, revert
         if (sharesToMint < shares) {
             revert Exception(4, sharesToMint, shares, address(0), address(0));
@@ -466,7 +464,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares minted
     function depositZap(uint256 assets, address receiver) public payable returns (uint256) {
         // Transfer assets of SWIV tokens from sender to this contract
-        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);    
+        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
         // Wrap msg.value into WETH
         WETH.deposit{value: msg.value}();
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
@@ -584,17 +582,25 @@ contract stkSWIV is ERC20 {
     // @param: token - address of the token to withdraw
     // @param: receiver - address of the receiver
     // @returns: the amount of tokens withdrawn
-    function BALWithdraw(address token, address payable receiver) Authorized(admin) public returns (uint256) {
+    function adminWithdraw(address token, address payable receiver) Authorized(admin) public returns (uint256) {
         if (token == address(0)) {
             receiver.transfer(address(this).balance);
             return (address(this).balance);
         }
         else {
-            // Get the balance of the token
-            uint256 balance = IERC20(token).balanceOf(address(this));
-            // Transfer the token to the receiver
-            SafeTransferLib.transfer(ERC20(token), receiver, balance);
-            return (balance);
+            // If the token is balancerBPT, transfer 30% of the held balancerBPT to receiver
+            if (token == address(balancerLPT)) {
+                uint256 bptToTransfer = balancerLPT.balanceOf(address(this)) / 3;
+                SafeTransferLib.transfer(balancerLPT, receiver, bptToTransfer);
+                return (bptToTransfer);
+            }
+            else {
+                // Get the balance of the token
+                uint256 balance = IERC20(token).balanceOf(address(this));
+                // Transfer the token to the receiver
+                SafeTransferLib.transfer(ERC20(token), receiver, balance);
+                return (balance);
+            }
         }
     }
 

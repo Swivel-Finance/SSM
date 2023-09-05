@@ -60,6 +60,7 @@ contract SSMTest is Test {
         SSM.deposit(amount, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.totalSupply(), amount*1e18);
     }
 
     function testFirstMint() public {
@@ -68,6 +69,7 @@ contract SSMTest is Test {
         SSM.mint(amount*1e18, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.totalSupply(), amount*1e18);
     }
 
     function testCooldown() public {
