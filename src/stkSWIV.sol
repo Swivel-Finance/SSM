@@ -188,6 +188,8 @@ contract stkSWIV is ERC20 {
         uint256 shares = convertToShares(assets);
         // Require the total amount to be < balanceOf
         if (cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
+            emit TestException(assets, address(this), "assets");
+            emit TestException(cooldownAmount[msg.sender], address(this), "cooldownAmount[msg.sender] + shares");
             revert Exception(3, cooldownAmount[msg.sender] + shares, balanceOf[msg.sender], msg.sender, address(0));
         }
         // Reset cooldown time
@@ -358,6 +360,8 @@ contract stkSWIV is ERC20 {
         IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
         // Calculate expected shares to mint
         uint256 sharesToMint = previewMint(minBPT);
+        emit TestException(minBPT, address(this), "minBPT");
+        emit TestException(convertToAssets(convertToShares(minBPT)), address(this), "full circle assets");
         // If the shares to mint is less than the minimum shares, revert
         if (sharesToMint < shares) {
             revert Exception(4, sharesToMint, shares, address(0), address(0));
@@ -394,6 +398,8 @@ contract stkSWIV is ERC20 {
     // @param: owner - address of the owner
     // @returns: the amount of SWIV tokens withdrawn
     function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256) {
+        // Convert shares to assets
+        uint256 assets = previewRedeem(shares);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -427,23 +433,28 @@ contract stkSWIV is ERC20 {
         IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
             assets: assetData,
             minAmountsOut: amountData,
-            userData: new bytes(0),
+            userData: abi.encode(1, assets),
             toInternalBalance: false
         });
+
+        // Query the pool exit to get the amounts out
+        (uint256 bptIn, uint256[] memory amountsOut) = balancerQuery.queryExit(balancerPoolID, address(this), address(this), requestData);
+        // Encode new userData with queried amountsOut and bptIn
+        requestData.userData = abi.encode(1, amountsOut, bptIn);
         // Exit the balancer pool using the request struct
         IVault(balancerVault).exitPool(balancerPoolID, payable(address(this)), payable(address(this)), requestData);
-        // Transfer the SWIV tokens to the receiver
-        SafeTransferLib.transfer(SWIV, receiver, SWIV.balanceOf(address(this)));
-        // Transfer the ETH to the receiver
-        receiver.transfer(address(this).balance);
-        // Burn the shares
-        _burn(msg.sender, shares);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
-        // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
-        // Emit withdraw event
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        // // Transfer the SWIV tokens to the receiver
+        // SafeTransferLib.transfer(SWIV, receiver, SWIV.balanceOf(address(this)));
+        // // Transfer the ETH to the receiver
+        // receiver.transfer(address(this).balance);
+        // // Burn the shares
+        // _burn(msg.sender, shares);
+        // // Reset the cooldown time
+        // cooldownTime[msg.sender] = 0;
+        // // Reset the cooldown amount
+        // cooldownAmount[msg.sender] = 0;
+        // // Emit withdraw event
+        // emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         return (assets);
     }
