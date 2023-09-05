@@ -34,6 +34,8 @@ contract stkSWIV is ERC20 {
     mapping (address => uint256) public cooldownAmount;
     // Determines whether the contract is paused or not
     bool public paused;
+    // The most recently withdrawn BPT timestamp in unix (only when paying out insurance)
+    uint256 public lastWithdrawnBPT;
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
@@ -590,8 +592,14 @@ contract stkSWIV is ERC20 {
         else {
             // If the token is balancerBPT, transfer 30% of the held balancerBPT to receiver
             if (token == address(balancerLPT)) {
+                // Require a week between bpt withdrawals
+                require(block.timestamp >= lastWithdrawnBPT + 1 weeks, "Admin already withdrawn recently");
+                // Calculate max balance that can be withdrawn
                 uint256 bptToTransfer = balancerLPT.balanceOf(address(this)) / 3;
+                // Transfer the balancer LP tokens to the receiver
                 SafeTransferLib.transfer(balancerLPT, receiver, bptToTransfer);
+                // Reset the last withdrawn timestamp
+                lastWithdrawnBPT = block.timestamp;
                 return (bptToTransfer);
             }
             else {
