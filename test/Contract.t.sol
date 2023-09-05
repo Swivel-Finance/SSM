@@ -33,7 +33,6 @@ contract SSMTest is Test {
 
 
     function setUp() public {
-
         // Deploy new SSM contract
         SSM = new stkSWIV(BAL, Vault, LPT, poolID);
 
@@ -229,6 +228,18 @@ contract SSMTest is Test {
         uint256 amount = startingBalance / 2;
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
+        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
+        assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(BAL.balanceOf(address(SSM)), 0);
+        assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
+
+    function testMintZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance*1e18 / 2;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
+        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
         assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
         assertEq(BAL.balanceOf(address(SSM)), 0);
         assertEq(BAL.balanceOf(address(WETH)), 0);
