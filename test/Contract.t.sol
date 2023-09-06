@@ -238,7 +238,7 @@ contract SSMTest is Test {
 
     function testMintZap() public {
         vm.startPrank(Constants.userPublicKey);
-        uint256 amount = 597377559108214882330512;
+        uint256 amount = 833211022431743032540000000000000000000;
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
         assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
@@ -250,7 +250,7 @@ contract SSMTest is Test {
 
     function testMintZapTooLittleShares() public {
         vm.startPrank(Constants.userPublicKey);
-        uint256 amount = 897377559108214882330512;
+        uint256 amount = 853211022431743032540000000000000000001;
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         vm.expectRevert();
         SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
@@ -262,19 +262,22 @@ contract SSMTest is Test {
         (uint256 minBPT,uint256 sharesMinted) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
         SSM.cooldown(sharesMinted);
         vm.warp(block.timestamp + SSM.cooldownLength());
-        SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey); 
+        SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey);
     }
 
     function testWithdrawZap() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        (uint256 sharesMinted, uint256 swivDeposited) = SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
+        uint256 ethAmount = 1 ether;
+        (uint256 sharesMinted, ,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey);
+        uint256 swivDeposited = balancesSpent[0];
         console.log("Shares Minted: ", sharesMinted);
         console.log("Swiv Deposited: ", swivDeposited);
         SSM.cooldown(sharesMinted);
         vm.warp(block.timestamp + SSM.cooldownLength());
-        (uint256 sharesBurnt, uint256 swivReturned) = SSM.withdrawZap(swivDeposited, payable(Constants.userPublicKey), Constants.userPublicKey); 
-        console.log("Shares Burnt: ", sharesBurnt);
-        console.log("Swiv Returned: ", swivReturned);
+        uint256 swivWithdrawn = swivDeposited - (swivDeposited*5/10000);
+        uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
+        (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey); 
+        assertApproxEqRel(SSM.convertToShares(853211022431743032540), SSM.convertToShares(853282338599770425535),0.005e18);
     }
 }
