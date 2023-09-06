@@ -260,11 +260,21 @@ contract SSMTest is Test {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = 697377559108214882330512;
         (uint256 minBPT,uint256 sharesMinted) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
-        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
-        console.log("Shares Minted: ", sharesMinted);
-        console.log("Total Supply", SSM.totalSupply());
         SSM.cooldown(sharesMinted);
         vm.warp(block.timestamp + SSM.cooldownLength());
         SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey); 
+    }
+
+    function testWithdrawZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        (uint256 sharesMinted, uint256 swivDeposited) = SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
+        console.log("Shares Minted: ", sharesMinted);
+        console.log("Swiv Deposited: ", swivDeposited);
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        (uint256 sharesBurnt, uint256 swivReturned) = SSM.withdrawZap(swivDeposited, payable(Constants.userPublicKey), Constants.userPublicKey); 
+        console.log("Shares Burnt: ", sharesBurnt);
+        console.log("Swiv Returned: ", swivReturned);
     }
 }
