@@ -33,7 +33,6 @@ contract SSMTest is Test {
 
 
     function setUp() public {
-
         // Deploy new SSM contract
         SSM = new stkSWIV(BAL, Vault, LPT, poolID);
 
@@ -61,6 +60,7 @@ contract SSMTest is Test {
         SSM.deposit(amount, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.totalSupply(), amount*1e18);
     }
 
     function testFirstMint() public {
@@ -69,6 +69,7 @@ contract SSMTest is Test {
         SSM.mint(amount*1e18, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.totalSupply(), amount*1e18);
     }
 
     function testCooldown() public {
@@ -78,14 +79,14 @@ contract SSMTest is Test {
 
         SSM.cooldown(amount);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
-        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
     }
 
     function testImmediateWithdrawal() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         vm.warp(block.timestamp+ SSM.cooldownLength());
         SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance);
@@ -95,10 +96,10 @@ contract SSMTest is Test {
     function testImmediateRedeem() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance);
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -106,11 +107,11 @@ contract SSMTest is Test {
     function testEventualWithdraw() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         LPT.transfer(address(SSM), amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -118,11 +119,11 @@ contract SSMTest is Test {
     function testEventualRedeem() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         LPT.transfer(address(SSM), amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -130,8 +131,8 @@ contract SSMTest is Test {
     function testSecondaryDepositWithdraw() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount/2);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         vm.warp(block.timestamp+ SSM.cooldownLength());
         SSM.withdraw(amount/2, Constants.userPublicKey, Constants.userPublicKey);
         SSM.deposit(amount + amount/2, Constants.userPublicKey);
@@ -143,7 +144,7 @@ contract SSMTest is Test {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = (startingBalance*1e18) / 2;
         SSM.mint(amount, Constants.userPublicKey);
-        SSM.cooldown(amount/1e18/2);
+        SSM.cooldown(amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
         SSM.redeem(amount/2, Constants.userPublicKey, Constants.userPublicKey);
         SSM.mint(amount + amount/2, Constants.userPublicKey);
@@ -154,8 +155,8 @@ contract SSMTest is Test {
     function testPause() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         vm.warp(block.timestamp+ SSM.cooldownLength());
         vm.stopPrank();
         SSM.pause(true);
@@ -167,8 +168,8 @@ contract SSMTest is Test {
     function testCooldownTooShort() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         vm.warp(block.timestamp + SSM.cooldownLength() - 100);
         vm.expectRevert();
         SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
@@ -177,8 +178,8 @@ contract SSMTest is Test {
     function testCooldownNotEnough() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount-1);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted-1);
         vm.warp(block.timestamp + SSM.cooldownLength());
         vm.expectRevert();
         SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
@@ -187,8 +188,8 @@ contract SSMTest is Test {
     function testWithdrawalWindowLength() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
+        SSM.cooldown(minted);
         vm.warp(block.timestamp + SSM.cooldownLength() + SSM.withdrawalWindow() + 1);
         vm.expectRevert();
         SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
@@ -197,9 +198,9 @@ contract SSMTest is Test {
     function testClearingCooldownTimeOnWithdraw() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
 
-        SSM.cooldown(amount);
+        SSM.cooldown(minted);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
         vm.warp(block.timestamp + SSM.cooldownLength());
@@ -214,7 +215,7 @@ contract SSMTest is Test {
         uint256 amount = (startingBalance * 1e18) / 2;
         SSM.mint(amount, Constants.userPublicKey);
 
-        SSM.cooldown(amount/1e18);
+        SSM.cooldown(amount);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
         vm.warp(block.timestamp + SSM.cooldownLength());
@@ -229,8 +230,54 @@ contract SSMTest is Test {
         uint256 amount = startingBalance / 2;
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
+        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
         assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
         assertEq(BAL.balanceOf(address(SSM)), 0);
         assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
+
+    function testMintZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 833211022431743032540000000000000000000;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
+        assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
+        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
+        assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(BAL.balanceOf(address(SSM)), 0);
+        assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
+
+    function testMintZapTooLittleShares() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 853211022431743032540000000000000000001;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        vm.expectRevert();
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
+    }
+
+    function testRedeemZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 697377559108214882330512;
+        (uint256 minBPT,uint256 sharesMinted) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey);
+    }
+
+    function testWithdrawZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        uint256 ethAmount = 1 ether;
+        (uint256 sharesMinted, ,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey);
+        uint256 swivDeposited = balancesSpent[0];
+        console.log("Shares Minted: ", sharesMinted);
+        console.log("Swiv Deposited: ", swivDeposited);
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        uint256 swivWithdrawn = swivDeposited - (swivDeposited*5/10000);
+        uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
+        (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey); 
+        assertApproxEqRel(SSM.convertToShares(853211022431743032540), SSM.convertToShares(853282338599770425535),0.005e18);
     }
 }
