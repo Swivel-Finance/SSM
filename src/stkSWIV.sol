@@ -244,10 +244,8 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
         // Burn the shares
         _burn(msg.sender, shares);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -304,10 +302,8 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
         // Burn the shares   
         _burn(msg.sender, shares);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -452,14 +448,12 @@ contract stkSWIV is ERC20 {
         receiver.transfer(address(this).balance);
         // Burn the shares
         _burn(msg.sender, shares);
-        // // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
         // // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptIn, shares);
 
-        return (assets, shares, [amountsOut[0], amountsOut[1]]);
+        return (bptIn, shares, [amountsOut[0], amountsOut[1]]);
     }
 
     // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
@@ -592,10 +586,8 @@ contract stkSWIV is ERC20 {
         receiver.transfer(amountsOut[1]);
         // Burn the shares
         _burn(msg.sender, sharesRedeemed);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - sharesRedeemed;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptOut, sharesRedeemed);
 
