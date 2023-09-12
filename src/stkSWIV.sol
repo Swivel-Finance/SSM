@@ -51,6 +51,8 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
+    event TestException(uint256, address, string);
+
     constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
         balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);

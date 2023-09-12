@@ -28,9 +28,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
             return uint256(slotValue);
     }
 
-
     function setUp() public {
-
         // Deploy new SSM contract
         SSM = new stkSWIV(BAL, Vault, LPT, poolID);
 
@@ -58,6 +56,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.deposit(amount, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.totalSupply(), amount*1e18);
     }
 
     function testFirstMint() public {
@@ -66,6 +65,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.mint(amount*1e18, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.totalSupply(), amount*1e18);
     }
 
     function testCooldown() public {
@@ -75,7 +75,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
 
         SSM.cooldown(amount*1e18);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
-        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
     }
 
     function testImmediateWithdrawal() public {
@@ -95,7 +95,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.deposit(amount, Constants.userPublicKey);
         SSM.cooldown(amount*1e18);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance);
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -107,7 +107,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.cooldown(amount*1e18);
         LPT.transfer(address(SSM), amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -119,7 +119,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.cooldown(amount*1e18);
         LPT.transfer(address(SSM), amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(amount*1e18, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -194,13 +194,11 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     function testClearingCooldownTimeOnWithdraw() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-
+        uint256 minted = SSM.deposit(amount, Constants.userPublicKey);
         SSM.cooldown(amount*1e18);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
         vm.warp(block.timestamp + SSM.cooldownLength());
-
         SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
@@ -210,12 +208,10 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = (startingBalance * 1e18) / 2;
         SSM.mint(amount, Constants.userPublicKey);
-
         SSM.cooldown(amount);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
         vm.warp(block.timestamp + SSM.cooldownLength());
-
         SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
