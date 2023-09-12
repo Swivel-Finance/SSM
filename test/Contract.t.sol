@@ -223,8 +223,62 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     function testDepositZap() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
+<<<<<<< Updated upstream
         SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
         // assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
         // assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
+=======
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey, 0);
+        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
+        assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(BAL.balanceOf(address(SSM)), 0);
+        assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
+
+    function testMintZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 833211022431743032540000000000000000000;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
+        assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
+        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
+        assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(BAL.balanceOf(address(SSM)), 0);
+        assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
+
+    function testMintZapTooLittleShares() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 853211022431743032540000000000000000001;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        vm.expectRevert();
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
+    }
+
+    function testRedeemZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 697377559108214882330512;
+        (uint256 minBPT,uint256 sharesMinted) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey);
+    }
+
+    function testWithdrawZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        uint256 ethAmount = 1 ether;
+        (uint256 sharesMinted, ,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey, 0);
+        uint256 swivDeposited = balancesSpent[0];
+        console.log("Shares Minted: ", sharesMinted);
+        console.log("Swiv Deposited: ", swivDeposited);
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        uint256 swivWithdrawn = swivDeposited - (swivDeposited*5/10000);
+        uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
+        (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey, type(uint256).max); 
+        assertApproxEqRel(SSM.convertToShares(853211022431743032540), SSM.convertToShares(853282338599770425535),0.005e18);
+>>>>>>> Stashed changes
     }
 }
