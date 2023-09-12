@@ -39,11 +39,6 @@ contract stkSWIV is ERC20 {
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
-    uint256 public debuggingUint;
-    string public debuggingString;
-    address public debuggingAddress;
-    bytes32 public debuggingBytes32;
-
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
     event Withdraw(
@@ -328,7 +323,7 @@ contract stkSWIV is ERC20 {
     // @param: receiver - address of the receiver
     // @returns: assets the amount of SWIV tokens deposited
     // @returns: sharesToMint the actual amount of shares minted
-    function mintZap(uint256 shares, address receiver) public payable returns (uint256 assets, uint256 sharesToMint) {
+    function mintZap(uint256 shares, address receiver) public payable returns (uint256 assets, uint256 sharesToMint, uint256[2] memory balancesSpent) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
@@ -352,7 +347,6 @@ contract stkSWIV is ERC20 {
         (uint256 minBPT, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
         // Calculate expected shares to mint before transfering funds 
         sharesToMint = convertToShares(minBPT);
-        emit TestException(sharesToMint, address(this), "shares to mint");
         // Wrap msg.value into WETH
         WETH.deposit{value: msg.value}();
         // Transfer assets of SWIV tokens from sender to this contract
@@ -370,13 +364,11 @@ contract stkSWIV is ERC20 {
         {
             // If there is any leftover SWIV, transfer it to the msg.sender
             uint256 remainingSWIV = SWIV.balanceOf(address(this));
-            emit TestException(remainingSWIV, address(this), "remaining Swiv");
             if (remainingSWIV > 0) {
                 // Transfer the SWIV to the receiver
                 SafeTransferLib.transfer(SWIV, msg.sender, remainingSWIV);
             }
             uint256 remainingWETH = WETH.balanceOf(address(this));
-            emit TestException(remainingWETH, address(this), "remaining WETH");
             // If there is any leftover ETH, transfer it to the msg.sender
             if (remainingWETH > 0) {
                 // Transfer the ETH to the receiver
@@ -387,7 +379,7 @@ contract stkSWIV is ERC20 {
         // Emit deposit event
         emit Deposit(msg.sender, receiver, minBPT, sharesToMint);
 
-        return (minBPT, sharesToMint);
+        return (minBPT, sharesToMint, [amountsIn[0], amountsIn[1]]);
     }
 
     // Exits the balancer pool and transfers `assets` of SWIV tokens and the current balance of ETH to `receiver`
@@ -397,26 +389,28 @@ contract stkSWIV is ERC20 {
     // @param: owner - address of the owner
     // @returns: assets the amount of bpt withdrawn
     // @returns: sharesBurnt the amount of stkSWIV shares burnt
-    function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256 assets, uint256 sharesBurnt) {
+    function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256 assets, uint256 sharesBurnt, uint256[2] memory balancesReturned) {
         // Convert shares to assets
         assets = previewRedeem(shares);
-        // Get the cooldown time
-        uint256 cTime = cooldownTime[msg.sender];
-        // If the sender is not the owner check allowances
-        if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender];
-            // If the allowance is not max, subtract the shares from the allowance, reverts on underflow if not enough allowance
-            if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
-        }
-        // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
-            revert Exception(0, cTime, block.timestamp, address(0), address(0));
-        }
         {
-            // If the redeemed shares is greater than the cooldown amount, revert
-            uint256 cAmount = cooldownAmount[msg.sender];
-            if (shares > cAmount) {
-                revert Exception(1, cAmount, shares, address(0), address(0));
+            // Get the cooldown time
+            uint256 cTime = cooldownTime[msg.sender];
+            // If the sender is not the owner check allowances
+            if (msg.sender != owner) {
+                uint256 allowed = allowance[owner][msg.sender];
+                // If the allowance is not max, subtract the shares from the allowance, reverts on underflow if not enough allowance
+                if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - shares;
+            }
+            // If the cooldown time is in the future or 0, revert
+            if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
+                revert Exception(0, cTime, block.timestamp, address(0), address(0));
+            }
+            {
+                // If the redeemed shares is greater than the cooldown amount, revert
+                uint256 cAmount = cooldownAmount[msg.sender];
+                if (shares > cAmount) {
+                    revert Exception(1, cAmount, shares, address(0), address(0));
+                }
             }
         }
         // If the shares are greater than the balance of the owner, revert
@@ -443,6 +437,10 @@ contract stkSWIV is ERC20 {
         // if bptIn isnt equivalent to assets, overwrite shares
         if (bptIn != assets) {
             shares = convertToShares(bptIn);
+            // Require the bptIn <= shares converted to assets (to account for slippage)
+            if (bptIn > convertToAssets(shares)) {
+                revert Exception(5, bptIn, convertToAssets(shares), address(0), address(0));
+            }
         }
         // Encode new userData with queried amountsOut and bptIn
         requestData.userData = abi.encode(1, bptIn);
@@ -461,16 +459,17 @@ contract stkSWIV is ERC20 {
         // // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptIn, shares);
 
-        return (assets, shares);
+        return (assets, shares, [amountsOut[0], amountsOut[1]]);
     }
 
     // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
     // Then joins the balancer pool with the SWIV and ETH before minting `shares` to `receiver`
     // @param: assets - maximum amount of SWIV tokens to deposit
     // @param: receiver - address of the receiver
+    // @param: minimumBPT - minimum amount of balancerLPT tokens to mint
     // @returns: the amount of stkSWIV shares minted
     // @returns: the amount of swiv actually deposited
-    function depositZap(uint256 assets, address receiver) public payable returns (uint256 sharesMinted, uint256 bptIn, uint256[2] memory balancesSpent) {
+    function depositZap(uint256 assets, address receiver, uint256 minimumBPT) public payable returns (uint256 sharesMinted, uint256 bptIn, uint256[2] memory balancesSpent) {
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), assets);
         // Wrap msg.value into WETH
@@ -492,13 +491,12 @@ contract stkSWIV is ERC20 {
                 });
         // Query the pool join to get the bpt out
         (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-
+        // If the bptOut is less than the minimum bpt, revert (to account for slippage)
+        if (bptOut < minimumBPT) {
+            revert Exception(5, bptOut, minimumBPT, address(0), address(0));
+        }
+        //  Calculate shares to mint
         sharesMinted = convertToShares(bptOut);
-        emit TestException(bptOut, address(this), "bpt returned from deposit");
-        emit TestException(sharesMinted, address(this), "shares minted from bpt returned");
-        emit TestException(amountsIn[0], address(this), "swiv query amount deposit");
-        emit TestException(amountsIn[1], address(this), "eth query amount deposit");
-
         // Encode new userData with queried amountsIn and bptOut
         requestData.userData = abi.encode(1, amountsIn, bptOut);
         // Join the balancer pool using the request struct
@@ -529,8 +527,9 @@ contract stkSWIV is ERC20 {
     // @param: assets - amount of SWIV tokens to withdraw
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
+    // @param: maximumBPT - maximum amount of balancerLPT tokens to redeem
     // @returns: the amount of stkSWIV shares burnt
-    function withdrawZap(uint256 assets, uint256 ethAssets, address payable receiver, address owner) Unpaused() public returns (uint256 sharesRedeemed, uint256 bptOut, uint256[2] memory balancesReturned) {
+    function withdrawZap(uint256 assets, uint256 ethAssets, address payable receiver, address owner, uint256 maximumBPT) Unpaused() public returns (uint256 sharesRedeemed, uint256 bptOut, uint256[2] memory balancesReturned) {
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -557,11 +556,12 @@ contract stkSWIV is ERC20 {
         });
         // Query the pool exit to get the amounts out
         (uint256 bptOut, uint256[] memory amountsOut) = balancerQuery.queryExit(balancerPoolID, address(this), address(this), requestData);
+        // Require the bptOut to be less than the maximum bpt (to account for slippage)
+        if (bptOut > maximumBPT) {
+            revert Exception(5, bptOut, maximumBPT, address(0), address(0));
+        }
+        // Calculate shares to redeem
         sharesRedeemed = convertToShares(bptOut);
-        emit TestException(bptOut, address(this), "bpt amount required for withdraw");
-        emit TestException(sharesRedeemed, address(this), "shares redeemed from bpt amount required for withdraw");
-        emit TestException(amountsOut[0], address(this), "swiv query amount for withdraw");
-        emit TestException(amountsOut[1], address(this), "eth query amount for withdraw");
         // Encode new userData with queried amountsOut and bptIn
         requestData.userData = abi.encode(2, amountsOut, bptOut);
         // Convert bptIn to shares
