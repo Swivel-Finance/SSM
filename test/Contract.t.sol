@@ -9,7 +9,7 @@ import {stkSWIV} from 'src/stkSWIV.sol';
 import {ERC20} from 'src/ERC/SolmateERC20.sol';
 import {IVault} from 'src/Interfaces/IVault.sol';
 import {IERC20} from 'src/Interfaces/IERC20.sol';
-
+import {IWETH} from 'src/Interfaces/IWETH.sol';
 import {Constants} from 'test/Constants.sol';
 
 contract SSMTest is Test {
@@ -19,6 +19,7 @@ contract SSMTest is Test {
     ERC20 BAL = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
     IVault Vault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
     ERC20 LPT = ERC20(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
+    IWETH WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     bytes32 poolID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
     uint256 startingBalance = 1923.29 * 2 * 1e18;
 
@@ -223,11 +224,6 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     function testDepositZap() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-<<<<<<< Updated upstream
-        SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey);
-        // assertEq(LPT.balanceOf(Constants.userPublicKey), amount);
-        // assertEq(SSM.balanceOf(Constants.userPublicKey), amount*1e18);
-=======
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         SSM.depositZap{value: 1 ether}(amount, Constants.userPublicKey, 0);
         console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
@@ -259,7 +255,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     function testRedeemZap() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = 697377559108214882330512;
-        (uint256 minBPT,uint256 sharesMinted) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
+        (uint256 minBPT,uint256 sharesMinted,) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
         SSM.cooldown(sharesMinted);
         vm.warp(block.timestamp + SSM.cooldownLength());
         SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey);
@@ -269,7 +265,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
         uint256 ethAmount = 1 ether;
-        (uint256 sharesMinted, ,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey, 0);
+        (uint256 sharesMinted,,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey, 0);
         uint256 swivDeposited = balancesSpent[0];
         console.log("Shares Minted: ", sharesMinted);
         console.log("Swiv Deposited: ", swivDeposited);
@@ -279,6 +275,5 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
         (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey, type(uint256).max); 
         assertApproxEqRel(SSM.convertToShares(853211022431743032540), SSM.convertToShares(853282338599770425535),0.005e18);
->>>>>>> Stashed changes
     }
 }
