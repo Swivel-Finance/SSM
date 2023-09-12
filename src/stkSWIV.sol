@@ -632,10 +632,10 @@ contract stkSWIV is ERC20 {
     }
 
     // Method to redeem BAL incentives from a given balancer gauge
-    // @param: gauge - address of the balancer gauge
     // @param: receiver - address of the receiver
+    // @param: gauge - address of the balancer gauge
     // @returns: the amount of BAL withdrawn
-    function adminWithdrawBAL(address gauge, address balancerMinter, address receiver) Authorized(admin) public returns (uint256) {
+    function adminWithdrawBAL(address balancerMinter, address gauge, address receiver) Authorized(admin) public returns (uint256) {
         // Mint BAL accrued on a given gauge
         uint256 amount = IBalancerMinter(balancerMinter).mint(gauge);
         // Transfer the tokens to the receiver
