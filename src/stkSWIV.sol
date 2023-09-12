@@ -276,7 +276,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares withdrawn
     function withdraw(uint256 assets, address receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert assets to shares
-        uint256 shares = previewWithdraw(assets);(assets);
+        uint256 shares = previewWithdraw(assets);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
