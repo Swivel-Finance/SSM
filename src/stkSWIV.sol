@@ -7,6 +7,7 @@ import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
 import './Interfaces/IWETH.sol';
 import './Interfaces/IQuery.sol';
+import './Interfaces/IBalancerMinter.sol';
 
 contract stkSWIV is ERC20 {
     using FixedPointMathLib for uint256;
@@ -21,7 +22,8 @@ contract stkSWIV is ERC20 {
     IVault immutable public balancerVault;
     // The Static Balancer Query Helper
     IQuery immutable public balancerQuery;
-
+    // The Static Balancer Token ERC20
+    ERC20 immutable public balancerToken;
     // The Balancer Pool ID
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
@@ -59,6 +61,7 @@ contract stkSWIV is ERC20 {
         balancerLPT = b;
         balancerPoolID = p;
         balancerQuery = IQuery(0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5);
+        balancerToken = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
         admin = msg.sender;
         SafeTransferLib.approve(SWIV, address(balancerVault), type(uint256).max);
         SafeTransferLib.approve(ERC20(address(WETH)), address(balancerVault), type(uint256).max);
@@ -626,6 +629,18 @@ contract stkSWIV is ERC20 {
                 return (balance);
             }
         }
+    }
+
+    // Method to redeem BAL incentives from a given balancer gauge
+    // @param: gauge - address of the balancer gauge
+    // @param: receiver - address of the receiver
+    // @returns: the amount of BAL withdrawn
+    function adminWithdrawBAL(address gauge, address balancerMinter, address receiver) Authorized(admin) public returns (uint256) {
+        // Mint BAL accrued on a given gauge
+        uint256 amount = IBalancerMinter(balancerMinter).mint(gauge);
+        // Transfer the tokens to the receiver
+        SafeTransferLib.transfer(balancerToken, receiver, amount);
+        return (amount);
     }
 
     // Sets a new admin address
