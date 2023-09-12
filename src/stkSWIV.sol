@@ -537,8 +537,6 @@ contract stkSWIV is ERC20 {
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
-        // Query pool info from balancer vault
-        (,uint256[] memory balances,) = balancerVault.getPoolTokens(balancerPoolID);
         // Instantiate balancer request struct using SWIV and ETH alongside the asset amount and 0 ETH
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
