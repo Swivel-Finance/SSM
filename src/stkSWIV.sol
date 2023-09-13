@@ -7,6 +7,7 @@ import './Utils/FixedPointMathLib.sol';
 import './Interfaces/IVault.sol';
 import './Interfaces/IWETH.sol';
 import './Interfaces/IQuery.sol';
+import './Interfaces/IBalancerMinter.sol';
 
 contract stkSWIV is ERC20 {
     using FixedPointMathLib for uint256;
@@ -21,7 +22,8 @@ contract stkSWIV is ERC20 {
     IVault immutable public balancerVault;
     // The Static Balancer Query Helper
     IQuery immutable public balancerQuery;
-
+    // The Static Balancer Token ERC20
+    ERC20 immutable public balancerToken;
     // The Balancer Pool ID
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
@@ -36,6 +38,8 @@ contract stkSWIV is ERC20 {
     bool public paused;
     // The most recently withdrawn BPT timestamp in unix (only when paying out insurance)
     uint256 public lastWithdrawnBPT;
+    // The queued emergency withdrawal time mapping
+    mapping (address => uint256) public withdrawalTime;
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
@@ -49,9 +53,11 @@ contract stkSWIV is ERC20 {
         uint256 shares
     );
 
-    error Exception(uint8, uint256, uint256, address, address);
+    event Paused(bool);
 
-    event TestException(uint256, address, string);
+    event WithdrawalQueued(address indexed token, uint256 indexed timestamp);
+
+    error Exception(uint8, uint256, uint256, address, address);
 
     constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
@@ -59,6 +65,7 @@ contract stkSWIV is ERC20 {
         balancerLPT = b;
         balancerPoolID = p;
         balancerQuery = IQuery(0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5);
+        balancerToken = ERC20(0xba100000625a3754423978a60c9317c58a424e3D);
         admin = msg.sender;
         SafeTransferLib.approve(SWIV, address(balancerVault), type(uint256).max);
         SafeTransferLib.approve(ERC20(address(WETH)), address(balancerVault), type(uint256).max);
@@ -120,8 +127,9 @@ contract stkSWIV is ERC20 {
 
     // Preview the amount of stkSWIV received from zapping and depositing `swivelAmount` of SWIV alongside a proportional amount of ETH
     // @param: swivelAmount - amount of SWIV tokens
+    // @param: ethAmount - amount of ETH
     // @returns: shares the amount of stkSWIV shares received
-    function previewDepositZap(uint256 swivelAmount) public returns (uint256 shares) {
+    function previewDepositZap(uint256 swivelAmount, uint256 ethAmount) public returns (uint256 shares, uint256[2] memory balancesSpent) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
@@ -129,7 +137,7 @@ contract stkSWIV is ERC20 {
 
         uint256[] memory amountData = new uint256[](2);
         amountData[0] = swivelAmount;
-        amountData[1] = type(uint256).max;
+        amountData[1] = ethAmount;
 
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
                     assets: assetData,
@@ -140,7 +148,7 @@ contract stkSWIV is ERC20 {
         // Query the pool join to get the bpt out
         (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
 
-        return (convertToShares(bptOut));
+        return (convertToShares(bptOut), [amountsIn[0], amountsIn[1]]);
     }
 
     // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
@@ -178,9 +186,9 @@ contract stkSWIV is ERC20 {
         return (type(uint256).max);
     }
 
-    // Queues `amount` of balancerLPT assets to be withdrawn after the cooldown period
-    // @param: amount - amount of balancerLPT assets to be withdrawn
-    // @returns: the total amount of balancerLPT assets to be withdrawn
+    // Queues `amount` of stkSWIV shares to be withdrawn after the cooldown period
+    // @param: amount - amount of stkSWIV shares to be withdrawn
+    // @returns: the total amount of stkSWIV shares to be withdrawn
     function cooldown(uint256 shares) public returns (uint256) {
         // Require the total amount to be < balanceOf
         if (cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
@@ -244,10 +252,8 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
         // Burn the shares
         _burn(msg.sender, shares);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -278,7 +284,7 @@ contract stkSWIV is ERC20 {
     // @returns: the amount of stkSWIV shares withdrawn
     function withdraw(uint256 assets, address receiver, address owner) Unpaused()  public returns (uint256) {
         // Convert assets to shares
-        uint256 shares = previewWithdraw(assets);(assets);
+        uint256 shares = previewWithdraw(assets);
         // Get the cooldown time
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
@@ -304,10 +310,8 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
         // Burn the shares   
         _burn(msg.sender, shares);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -452,14 +456,12 @@ contract stkSWIV is ERC20 {
         receiver.transfer(address(this).balance);
         // Burn the shares
         _burn(msg.sender, shares);
-        // // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
         // // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptIn, shares);
 
-        return (assets, shares, [amountsOut[0], amountsOut[1]]);
+        return (bptIn, shares, [amountsOut[0], amountsOut[1]]);
     }
 
     // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
@@ -592,10 +594,8 @@ contract stkSWIV is ERC20 {
         receiver.transfer(amountsOut[1]);
         // Burn the shares
         _burn(msg.sender, sharesRedeemed);
-        // Reset the cooldown time
-        cooldownTime[msg.sender] = 0;
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = 0;
+        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - sharesRedeemed;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptOut, sharesRedeemed);
 
@@ -634,6 +634,51 @@ contract stkSWIV is ERC20 {
                 return (balance);
             }
         }
+    }
+
+    // Method to queue the withdrawal of tokens in the event of an emergency
+    // @param: token - address of the token to withdraw
+    // @returns: the timestamp of the withdrawal
+    function queueWithdrawal(address token) Authorized(admin) public returns (uint256 timestamp){
+        timestamp = block.timestamp + 1 weeks;
+        withdrawalTime[token] = timestamp;
+        emit WithdrawalQueued(token, timestamp);
+        return (timestamp);
+    }
+
+    // Method to withdraw tokens in the event of an emergency
+    // @param: token - address of the token to withdraw
+    // @param: receiver - address of the receiver
+    // @returns: the amount of tokens withdrawn
+    function emergencyWithdraw(address token, address payable receiver) Authorized(admin) public returns (uint256 amount) {
+        // Require the current block.timestamp to be after the emergencyWithdrawal timestamp but before the emergencyWithdrawal timestamp + 1 week
+        if (block.timestamp < withdrawalTime[token] || block.timestamp > withdrawalTime[token] + 1 weeks) {
+            revert Exception(6, block.timestamp, withdrawalTime[token], address(0), address(0));
+        }
+        if (token == address(0)) {
+            amount = address(this).balance;
+            receiver.transfer(amount);
+            return (amount);
+        }
+        else {
+            // Get the balance of the token
+            uint256 balance = IERC20(token).balanceOf(address(this));
+            // Transfer the token to the receiver
+            SafeTransferLib.transfer(ERC20(token), receiver, balance);
+            return (balance);
+        }
+    }
+
+    // Method to redeem BAL incentives from a given balancer gauge
+    // @param: receiver - address of the receiver
+    // @param: gauge - address of the balancer gauge
+    // @returns: the amount of BAL withdrawn
+    function adminWithdrawBAL(address balancerMinter, address gauge, address receiver) Authorized(admin) public returns (uint256) {
+        // Mint BAL accrued on a given gauge
+        uint256 amount = IBalancerMinter(balancerMinter).mint(gauge);
+        // Transfer the tokens to the receiver
+        SafeTransferLib.transfer(balancerToken, receiver, amount);
+        return (amount);
     }
 
     // Sets a new admin address

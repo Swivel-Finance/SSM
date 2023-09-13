@@ -72,10 +72,9 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
         SSM.deposit(amount, Constants.userPublicKey);
-
         SSM.cooldown(amount*1e18);
         assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp + SSM.cooldownLength());
-        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
+        assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
     }
 
     function testImmediateWithdrawal() public {
@@ -91,11 +90,11 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
 
     function testImmediateRedeem() public {
         vm.startPrank(Constants.userPublicKey);
-        uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount*1e18);
+        uint256 amount = startingBalance*1e18 / 2;
+        SSM.mint(amount, Constants.userPublicKey);
+        SSM.cooldown(amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
+        SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
         assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance);
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
@@ -103,24 +102,25 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     function testEventualWithdraw() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
+        (uint256 sharesMinted) = SSM.deposit(amount, Constants.userPublicKey);
         SSM.cooldown(amount*1e18);
         LPT.transfer(address(SSM), amount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
-        assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
-        assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
+        (uint256 shares) = SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
+        assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance/2);
+        assertApproxEqRel(SSM.balanceOf(Constants.userPublicKey), sharesMinted/2, 0.0005e18);
     }
 
     function testEventualRedeem() public {
         vm.startPrank(Constants.userPublicKey);
-        uint256 amount = startingBalance / 2;
-        SSM.deposit(amount, Constants.userPublicKey);
-        SSM.cooldown(amount*1e18);
-        LPT.transfer(address(SSM), amount);
+        uint256 amount = startingBalance*1e18 / 2;
+        SSM.mint(amount, Constants.userPublicKey);
+        SSM.cooldown(amount);
+        uint256 donationAmount = startingBalance/4;
+        LPT.transfer(address(SSM), donationAmount);
         vm.warp(block.timestamp+ SSM.cooldownLength());
-        SSM.redeem(minted, Constants.userPublicKey, Constants.userPublicKey);
-        assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // -1 to account for donation rounding caused by 4626 inflation prevention
+        SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
+        assertEq(LPT.balanceOf(Constants.userPublicKey), startingBalance - 1); // Subtract 1 to account for both precision and 4626 inflation attack prevention
         assertEq(SSM.balanceOf(Constants.userPublicKey), 0);
     }
 
@@ -200,7 +200,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount*1e18);
         vm.warp(block.timestamp + SSM.cooldownLength());
         SSM.withdraw(amount, Constants.userPublicKey, Constants.userPublicKey);
-        assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
+        assertEq(SSM.cooldownTime(Constants.userPublicKey), block.timestamp);
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
     }
 
@@ -213,7 +213,6 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), amount);
         vm.warp(block.timestamp + SSM.cooldownLength());
         SSM.redeem(amount, Constants.userPublicKey, Constants.userPublicKey);
-        assertEq(SSM.cooldownTime(Constants.userPublicKey), 0);
         assertEq(SSM.cooldownAmount(Constants.userPublicKey), 0);
     }
 
@@ -234,7 +233,6 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
         assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
-        console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
         assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
         assertEq(BAL.balanceOf(address(SSM)), 0);
         assertEq(BAL.balanceOf(address(WETH)), 0);
@@ -263,13 +261,12 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         uint256 ethAmount = 1 ether;
         (uint256 sharesMinted,,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey, 0);
         uint256 swivDeposited = balancesSpent[0];
-        console.log("Shares Minted: ", sharesMinted);
-        console.log("Swiv Deposited: ", swivDeposited);
         SSM.cooldown(sharesMinted);
         vm.warp(block.timestamp + SSM.cooldownLength());
         uint256 swivWithdrawn = swivDeposited - (swivDeposited*5/10000);
         uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
         (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey, type(uint256).max); 
         assertApproxEqRel(SSM.convertToShares(853211022431743032540), SSM.convertToShares(853282338599770425535),0.005e18);
+        assertApproxEqRel(sharesBurnt, sharesMinted, 0.005e18);
     }
 }
