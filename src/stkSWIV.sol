@@ -38,6 +38,8 @@ contract stkSWIV is ERC20 {
     bool public paused;
     // The most recently withdrawn BPT timestamp in unix (only when paying out insurance)
     uint256 public lastWithdrawnBPT;
+    // The queued emergency withdrawal time mapping
+    mapping (address => uint256) public withdrawalTime;
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
@@ -51,9 +53,11 @@ contract stkSWIV is ERC20 {
         uint256 shares
     );
 
-    error Exception(uint8, uint256, uint256, address, address);
+    event Paused(bool);
 
-    event TestException(uint256, address, string);
+    event WithdrawalQueued(address indexed token, uint256 indexed timestamp);
+
+    error Exception(uint8, uint256, uint256, address, address);
 
     constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
@@ -125,7 +129,7 @@ contract stkSWIV is ERC20 {
     // @param: swivelAmount - amount of SWIV tokens
     // @param: ethAmount - amount of ETH
     // @returns: shares the amount of stkSWIV shares received
-    function previewDepositZap(uint256 swivelAmount, uint256 ethAmount) public returns (uint256 shares, uint256[2] balancesSpent) {
+    function previewDepositZap(uint256 swivelAmount, uint256 ethAmount) public returns (uint256 shares, uint256[2] memory balancesSpent) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
@@ -629,6 +633,39 @@ contract stkSWIV is ERC20 {
                 SafeTransferLib.transfer(ERC20(token), receiver, balance);
                 return (balance);
             }
+        }
+    }
+
+    // Method to queue the withdrawal of tokens in the event of an emergency
+    // @param: token - address of the token to withdraw
+    // @returns: the timestamp of the withdrawal
+    function queueWithdrawal(address token) Authorized(admin) public returns (uint256 timestamp){
+        timestamp = block.timestamp + 1 weeks;
+        withdrawalTime[token] = timestamp;
+        emit WithdrawalQueued(token, timestamp);
+        return (timestamp);
+    }
+
+    // Method to withdraw tokens in the event of an emergency
+    // @param: token - address of the token to withdraw
+    // @param: receiver - address of the receiver
+    // @returns: the amount of tokens withdrawn
+    function emergencyWithdraw(address token, address payable receiver) Authorized(admin) public returns (uint256 amount) {
+        // Require the current block.timestamp to be after the emergencyWithdrawal timestamp but before the emergencyWithdrawal timestamp + 1 week
+        if (block.timestamp < withdrawalTime[token] || block.timestamp > withdrawalTime[token] + 1 weeks) {
+            revert Exception(6, block.timestamp, withdrawalTime[token], address(0), address(0));
+        }
+        if (token == address(0)) {
+            amount = address(this).balance;
+            receiver.transfer(amount);
+            return (amount);
+        }
+        else {
+            // Get the balance of the token
+            uint256 balance = IERC20(token).balanceOf(address(this));
+            // Transfer the token to the receiver
+            SafeTransferLib.transfer(ERC20(token), receiver, balance);
+            return (balance);
         }
     }
 
