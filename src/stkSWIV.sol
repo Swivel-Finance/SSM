@@ -123,8 +123,9 @@ contract stkSWIV is ERC20 {
 
     // Preview the amount of stkSWIV received from zapping and depositing `swivelAmount` of SWIV alongside a proportional amount of ETH
     // @param: swivelAmount - amount of SWIV tokens
+    // @param: ethAmount - amount of ETH
     // @returns: shares the amount of stkSWIV shares received
-    function previewDepositZap(uint256 swivelAmount) public returns (uint256 shares) {
+    function previewDepositZap(uint256 swivelAmount, uint256 ethAmount) public returns (uint256 shares, uint256[2] balancesSpent) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
@@ -132,7 +133,7 @@ contract stkSWIV is ERC20 {
 
         uint256[] memory amountData = new uint256[](2);
         amountData[0] = swivelAmount;
-        amountData[1] = type(uint256).max;
+        amountData[1] = ethAmount;
 
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
                     assets: assetData,
@@ -143,7 +144,7 @@ contract stkSWIV is ERC20 {
         // Query the pool join to get the bpt out
         (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
 
-        return (convertToShares(bptOut));
+        return (convertToShares(bptOut), [amountsIn[0], amountsIn[1]]);
     }
 
     // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
@@ -181,9 +182,9 @@ contract stkSWIV is ERC20 {
         return (type(uint256).max);
     }
 
-    // Queues `amount` of balancerLPT assets to be withdrawn after the cooldown period
-    // @param: amount - amount of balancerLPT assets to be withdrawn
-    // @returns: the total amount of balancerLPT assets to be withdrawn
+    // Queues `amount` of stkSWIV shares to be withdrawn after the cooldown period
+    // @param: amount - amount of stkSWIV shares to be withdrawn
+    // @returns: the total amount of stkSWIV shares to be withdrawn
     function cooldown(uint256 shares) public returns (uint256) {
         // Require the total amount to be < balanceOf
         if (cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
