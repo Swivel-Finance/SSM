@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >= 0.8.4;
+
 import './ERC/SolmateERC20.sol';
 import './Utils/SafeTransferLib.sol';
 import './Utils/FixedPointMathLib.sol';
@@ -32,7 +33,7 @@ contract stkSWIV is ERC20 {
     // Mapping of user address -> unix timestamp for cooldown
     mapping (address => uint256) public cooldownTime;
     // Mapping of user address -> amount of stkSWIV shares to be withdrawn
-    mapping (address => uint256) public cooldownAmount;
+    mapping (address => uint256) internal _cooldownAmount;
     // Determines whether the contract is paused or not
     bool public paused;
     // The most recently withdrawn BPT timestamp in unix (only when paying out insurance)
@@ -41,6 +42,8 @@ contract stkSWIV is ERC20 {
     mapping (address => uint256) public withdrawalTime;
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    event TestException(string, uint256, uint256, address, address);
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -71,6 +74,13 @@ contract stkSWIV is ERC20 {
     }
 
     fallback() external payable {
+    }
+
+    function cooldownAmount(address owner) external view returns(uint256){
+        if (cooldownTime[owner] + withdrawalWindow < block.timestamp) {
+            return 0;
+        }
+        return _cooldownAmount[owner];
     }
 
     function asset() public view returns (address) {
@@ -190,15 +200,20 @@ contract stkSWIV is ERC20 {
     // @returns: the total amount of stkSWIV shares to be withdrawn
     function cooldown(uint256 shares) public returns (uint256) {
         // Require the total amount to be < balanceOf
-        if (cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
-            revert Exception(3, cooldownAmount[msg.sender] + shares, balanceOf[msg.sender], msg.sender, address(0));
+        if (_cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
+            revert Exception(3, _cooldownAmount[msg.sender] + shares, balanceOf[msg.sender], msg.sender, address(0));
+        }
+        // If cooldown window has passed, reset cooldownAmount + add, else add to current cooldownAmount
+        if (cooldownTime[msg.sender] + withdrawalWindow < block.timestamp) {
+            _cooldownAmount[msg.sender] = shares;
+        }
+        else {
+            _cooldownAmount[msg.sender] = _cooldownAmount[msg.sender] + shares;
         }
         // Reset cooldown time
         cooldownTime[msg.sender] = block.timestamp + cooldownLength;
-        // Add the amount;
-        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] + shares;
 
-        return(cooldownAmount[msg.sender]);
+        return(_cooldownAmount[msg.sender]);
     }
 
     // Mints `shares` to `receiver` and transfers `assets` of balancerLPT tokens from `msg.sender`
@@ -239,7 +254,7 @@ contract stkSWIV is ERC20 {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the redeemed shares is greater than the cooldown amount, revert
-        uint256 cAmount = cooldownAmount[msg.sender];
+        uint256 cAmount = _cooldownAmount[msg.sender];
         if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
@@ -252,7 +267,7 @@ contract stkSWIV is ERC20 {
         // Burn the shares
         _burn(msg.sender, shares);
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
+        _cooldownAmount[msg.sender] = _cooldownAmount[msg.sender] - shares;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -297,7 +312,7 @@ contract stkSWIV is ERC20 {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the redeemed shares is greater than the cooldown amount, revert
-        uint256 cAmount = cooldownAmount[msg.sender];
+        uint256 cAmount = _cooldownAmount[msg.sender];
         if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
@@ -310,7 +325,7 @@ contract stkSWIV is ERC20 {
         // Burn the shares   
         _burn(msg.sender, shares);
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
+        _cooldownAmount[msg.sender] = _cooldownAmount[msg.sender] - shares;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
@@ -357,7 +372,7 @@ contract stkSWIV is ERC20 {
         // Wrap msg.value into WETH
         WETH.deposit{value: msg.value}();
         // Transfer assets of SWIV tokens from sender to this contract
-        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), amountsIn[0]); 
+        SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), amountsIn[0]);
         // Encode new userData with queried amountsIn and bptOut
         requestData.userData = abi.encode(1, amountsIn, minBPT);
         // Join the balancer pool using the request struct
@@ -415,7 +430,7 @@ contract stkSWIV is ERC20 {
             }
             {
                 // If the redeemed shares is greater than the cooldown amount, revert
-                uint256 cAmount = cooldownAmount[msg.sender];
+                uint256 cAmount = _cooldownAmount[msg.sender];
                 if (shares > cAmount) {
                     revert Exception(1, cAmount, shares, address(0), address(0));
                 }
@@ -458,14 +473,16 @@ contract stkSWIV is ERC20 {
         requestData.userData = abi.encode(1, bptIn);
         // Exit the balancer pool using the request struct
         IVault(balancerVault).exitPool(balancerPoolID, payable(address(this)), payable(address(this)), requestData);
-        // // Transfer the SWIV tokens to the receiver
-        SafeTransferLib.transfer(SWIV, receiver, SWIV.balanceOf(address(this)));
-        // // Transfer the ETH to the receiver
-        receiver.transfer(address(this).balance);
+        // Unwrap the WETH
+        WETH.withdraw(amountsOut[1]);
+        // Transfer the SWIV tokens to the receiver
+        SafeTransferLib.transfer(SWIV, receiver, amountsOut[0]);
+        // Transfer the ETH to the receiver
+        receiver.transfer(amountsOut[1]);
         // Burn the shares
         _burn(msg.sender, shares);
         // // Reset the cooldown amount
-        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - shares;
+        _cooldownAmount[msg.sender] = _cooldownAmount[msg.sender] - shares;
         // // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptIn, shares);
 
@@ -546,7 +563,7 @@ contract stkSWIV is ERC20 {
         uint256 cTime = cooldownTime[msg.sender];
         // If the sender is not the owner check allowances
         // If the cooldown time is in the future or 0, revert
-        if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
+        if (cTime > block.timestamp || cTime + withdrawalWindow < block.timestamp) {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // Query pool info from balancer vault
@@ -568,6 +585,7 @@ contract stkSWIV is ERC20 {
         });
         // Query the pool exit to get the amounts out
         (uint256 bptOut, uint256[] memory amountsOut) = balancerQuery.queryExit(balancerPoolID, address(this), address(this), requestData);
+        emit TestException("BPT Amount", bptOut, bptOut, address(0), address(0));
         // Require the bptOut to be less than the maximum bpt (to account for slippage)
         if (bptOut > maximumBPT) {
             revert Exception(5, bptOut, maximumBPT, address(0), address(0));
@@ -580,7 +598,7 @@ contract stkSWIV is ERC20 {
         // This method is unique in that we cannot check against cAmounts before calculating shares
         // If the redeemed shares is greater than the cooldown amount, revert
         {
-            uint256 cAmount = cooldownAmount[msg.sender];
+            uint256 cAmount = _cooldownAmount[msg.sender];
             if (sharesRedeemed > cAmount) {
                 revert Exception(1, cAmount, sharesRedeemed, address(0), address(0));
             }
@@ -605,7 +623,7 @@ contract stkSWIV is ERC20 {
         // Burn the shares
         _burn(msg.sender, sharesRedeemed);
         // Reset the cooldown amount
-        cooldownAmount[msg.sender] = cooldownAmount[msg.sender] - sharesRedeemed;
+        _cooldownAmount[msg.sender] = _cooldownAmount[msg.sender] - sharesRedeemed;
         // Emit withdraw event
         emit Withdraw(msg.sender, receiver, owner, bptOut, sharesRedeemed);
 
