@@ -261,7 +261,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     function testRedeemZap() public {
         vm.startPrank(Constants.userPublicKey);
         uint256 amount = 697377559108214882330512;
-        (uint256 minBPT,uint256 sharesMinted,) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey, type(uint256).max, type(uint256).max);
+        (uint256 minBPT,uint256 sharesMinted,) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey, type(uint256).max);
         SSM.cooldown(sharesMinted);
         vm.warp(block.timestamp + SSM.cooldownLength());
         SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey, 0, 1 ether);
