@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >= 0.8.4;
-import "forge-std/console.sol";
 import './ERC/SolmateERC20.sol';
 import './Utils/SafeTransferLib.sol';
 import './Utils/FixedPointMathLib.sol';
@@ -319,15 +318,16 @@ contract stkSWIV is ERC20 {
     }
 
     //////////////////// ZAP METHODS ////////////////////
-
-    // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
+    // TODO: change to shares -> bpt query 
+    // Transfers a calculated amount of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
     // Then joins the balancer pool with the SWIV and ETH before minting minBPT of shares to `receiver`
+    // Slippage is bound by the `shares` parameter and the calculated maximumSWIV
     // @notice: The amounts transacted in this method are based on msg.value -- `shares` is the minimum amount of shares to mint
     // @param: shares - minimum amount of stkSWIV shares to mint
     // @param: receiver - address of the receiver
     // @returns: assets the amount of SWIV tokens deposited
     // @returns: sharesToMint the actual amount of shares minted
-    function mintZap(uint256 shares, address receiver) public payable returns (uint256 assets, uint256 sharesToMint, uint256[2] memory balancesSpent) {
+    function mintZap(uint256 shares, address receiver, uint256 maximumSWIV) public payable returns (uint256 assets, uint256 sharesToMint, uint256[2] memory balancesSpent) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(SWIV));
@@ -336,7 +336,10 @@ contract stkSWIV is ERC20 {
         (,uint256[] memory balances,) = balancerVault.getPoolTokens(balancerPoolID);
         // Calculate SWIV transfer amount from msg.value (expecting at least enough msg.value and SWIV available to cover `shares` minted)
         uint256 swivAmount = msg.value * balances[0] / balances[1];
-
+        // If the SWIV amount is greater than the maximum SWIV, revert
+        if (swivAmount > maximumSWIV) {
+            revert Exception(5, swivAmount, maximumSWIV, address(0), address(0));
+        }
         uint256[] memory amountData = new uint256[](2);
         amountData[0] = swivAmount;
         amountData[1] = msg.value;
@@ -386,14 +389,15 @@ contract stkSWIV is ERC20 {
         return (minBPT, sharesToMint, [amountsIn[0], amountsIn[1]]);
     }
 
-    // Exits the balancer pool and transfers `assets` of SWIV tokens and the current balance of ETH to `receiver`
+    // Exits the balancer pool and transfers queried amounts of SWIV tokens and ETH to `receiver`
     // Then burns `shares` from `owner`
+    // Slippage is bound by minimumETH and minimumSWIV
     // @param: shares - amount of stkSWIV shares to redeem
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
     // @returns: assets the amount of bpt withdrawn
     // @returns: sharesBurnt the amount of stkSWIV shares burnt
-    function redeemZap(uint256 shares, address payable receiver, address owner) Unpaused()  public returns (uint256 assets, uint256 sharesBurnt, uint256[2] memory balancesReturned) {
+    function redeemZap(uint256 shares, address payable receiver, address owner, uint256 minimumETH, uint256 minimumSWIV) Unpaused()  public returns (uint256 assets, uint256 sharesBurnt, uint256[2] memory balancesReturned) {
         // Convert shares to assets
         assets = previewRedeem(shares);
         {
@@ -427,8 +431,8 @@ contract stkSWIV is ERC20 {
         assetData[1] = IAsset(address(WETH));
 
         uint256[] memory amountData = new uint256[](2);
-        amountData[0] = 0;
-        amountData[1] = 0;
+        amountData[0] = minimumSWIV;
+        amountData[1] = minimumETH;
 
         IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
             assets: assetData,
@@ -438,13 +442,17 @@ contract stkSWIV is ERC20 {
         });
         // Query the pool exit to get the amounts out
         (uint256 bptIn, uint256[] memory amountsOut) = balancerQuery.queryExit(balancerPoolID, address(this), address(this), requestData);
-        // if bptIn isnt equivalent to assets, overwrite shares
+        // If bptIn isnt equivalent to assets, overwrite shares
         if (bptIn != assets) {
             shares = convertToShares(bptIn);
             // Require the bptIn <= shares converted to assets (to account for slippage)
             if (bptIn > convertToAssets(shares)) {
                 revert Exception(5, bptIn, convertToAssets(shares), address(0), address(0));
             }
+        }
+        // If the eth or swiv out is less than the minimum, revert
+        if (amountsOut[0] < minimumSWIV || amountsOut[1] < minimumETH) {
+            revert Exception(5, amountsOut[0], minimumSWIV, address(0), address(0));
         }
         // Encode new userData with queried amountsOut and bptIn
         requestData.userData = abi.encode(1, bptIn);
@@ -466,6 +474,7 @@ contract stkSWIV is ERC20 {
 
     // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
     // Then joins the balancer pool with the SWIV and ETH before minting `shares` to `receiver`
+    // Slippage is bound by minimumBPT
     // @param: assets - maximum amount of SWIV tokens to deposit
     // @param: receiver - address of the receiver
     // @param: minimumBPT - minimum amount of balancerLPT tokens to mint
@@ -526,6 +535,7 @@ contract stkSWIV is ERC20 {
 
     // Exits the balancer pool and transfers `assets` of SWIV tokens and the current balance of ETH to `receiver`
     // Then burns `shares` from `owner`
+    // Slippage is bound by maximumBPT
     // @param: assets - amount of SWIV tokens to withdraw
     // @param: receiver - address of the receiver
     // @param: owner - address of the owner
