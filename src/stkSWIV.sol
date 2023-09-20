@@ -76,6 +76,9 @@ contract stkSWIV is ERC20 {
     fallback() external payable {
     }
 
+    // @notice: If the user's cooldown window is passed, their cooldown amount is reset to 0
+    // @param: owner - address of the owner
+    // @returns: the cooldown amount
     function cooldownAmount(address owner) external view returns(uint256){
         if (cooldownTime[owner] + withdrawalWindow < block.timestamp) {
             return 0;
@@ -132,32 +135,6 @@ contract stkSWIV is ERC20 {
     // @returns: shares the amount of stkSWIV shares received
     function previewDeposit(uint256 assets) public view virtual returns (uint256 shares) {
         return (convertToShares(assets));
-    }
-
-    // Preview the amount of stkSWIV received from zapping and depositing `swivelAmount` of SWIV alongside a proportional amount of ETH
-    // @param: swivelAmount - amount of SWIV tokens
-    // @param: ethAmount - amount of ETH
-    // @returns: shares the amount of stkSWIV shares received
-    function previewDepositZap(uint256 swivelAmount, uint256 ethAmount) public returns (uint256 shares, uint256[2] memory balancesSpent) {
-        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData = new IAsset[](2);
-        assetData[0] = IAsset(address(SWIV));
-        assetData[1] = IAsset(address(WETH));
-
-        uint256[] memory amountData = new uint256[](2);
-        amountData[0] = swivelAmount;
-        amountData[1] = ethAmount;
-
-        IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-                    assets: assetData,
-                    maxAmountsIn: amountData,
-                    userData: abi.encode(1, amountData, 0),
-                    fromInternalBalance: false
-                });
-        // Query the pool join to get the bpt out
-        (uint256 bptOut, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-
-        return (convertToShares(bptOut), [amountsIn[0], amountsIn[1]]);
     }
 
     // Preview of the amount of stkSWIV required to withdraw `assets` of balancerLPT
