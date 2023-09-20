@@ -33,9 +33,21 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         // Deploy new SSM contract
         SSM = new stkSWIV(BAL, Vault, LPT, poolID);
 
-        deal(address(SSM), 0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef, 3732466346253321461382700026891);
-        deal(address(LPT), address(SSM), 3732466346253);
-        deal(0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef, 10000 ether);
+    //     deal(address(SSM), 0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef, 3732466346253321461382700026891);
+    //     deal(address(LPT), address(SSM), 3732466346253);
+    //     deal(0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef, 10000 ether);
+
+    //     // Approve SSM to spend BAL Tokens and LPT
+    //     vm.startPrank(0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef);
+    //     BAL.approve(address(SSM), type(uint256).max-1);
+    //     LPT.approve(address(SSM), type(uint256).max-1);
+    //     vm.stopPrank();
+    // }
+
+        // Deal BAL and LPT balances to key addresses
+        deal(address(BAL), Constants.userPublicKey, startingBalance);
+        deal(address(LPT), Constants.userPublicKey, startingBalance);
+        deal(Constants.userPublicKey, 10000 ether);
 
         // Approve SSM to spend BAL Tokens and LPT
         vm.startPrank(0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef);
@@ -239,47 +251,47 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     //     assertEq(BAL.balanceOf(address(WETH)), 0);
     // }
 
-    // function testMintZap() public {
-    //     vm.startPrank(Constants.userPublicKey);
-    //     uint256 amount = 833211022431743032540000000000000000000;
-    //     uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
-    //     SSM.mintZap{value: 1.1 ether}(amount, Constants.userPublicKey);
-    //     assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
-    //     assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
-    //     assertEq(BAL.balanceOf(address(SSM)), 0);
-    //     assertEq(BAL.balanceOf(address(WETH)), 0);
-    // }
+    function testMintZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 833211022431743032540000000000000000000;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        SSM.mintZap{value: 1.1 ether}(amount, Constants.userPublicKey, type(uint256).max);
+        assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
+        assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(BAL.balanceOf(address(SSM)), 0);
+        assertEq(BAL.balanceOf(address(WETH)), 0);
+    }
 
-    // function testMintZapTooLittleShares() public {
-    //     vm.startPrank(Constants.userPublicKey);
-    //     uint256 amount = 853211022431743032540000000000000000001;
-    //     uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
-    //     vm.expectRevert();
-    //     SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey); 
-    // }
+    function testMintZapTooLittleShares() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 853211022431743032540000000000000000001;
+        uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
+        vm.expectRevert();
+        SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey, type(uint256).max); 
+    }
 
-    // function testRedeemZap() public {
-    //     vm.startPrank(Constants.userPublicKey);
-    //     uint256 amount = 697377559108214882330512;
-    //     (uint256 minBPT,uint256 sharesMinted,) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey);
-    //     SSM.cooldown(sharesMinted);
-    //     vm.warp(block.timestamp + SSM.cooldownLength());
-    //     SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey);
-    // }
+    function testRedeemZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = 697377559108214882330512;
+        (uint256 minBPT,uint256 sharesMinted,) = SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey, type(uint256).max);
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        SSM.redeemZap(sharesMinted, payable(Constants.userPublicKey), Constants.userPublicKey, 0, 1 ether);
+    }
 
-    // function testWithdrawZap() public {
-    //     vm.startPrank(Constants.userPublicKey);
-    //     uint256 amount = startingBalance / 2;
-    //     uint256 ethAmount = 1 ether;
-    //     (uint256 sharesMinted,,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey, 0);
-    //     uint256 swivDeposited = balancesSpent[0];
-    //     SSM.cooldown(sharesMinted);
-    //     vm.warp(block.timestamp + SSM.cooldownLength());
-    //     uint256 swivWithdrawn = swivDeposited - (swivDeposited*5/10000);
-    //     uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
-    //     (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey, type(uint256).max); 
-    //     assertApproxEqRel(sharesBurnt, sharesMinted, 0.0005e18);
-    // }
+    function testWithdrawZap() public {
+        vm.startPrank(Constants.userPublicKey);
+        uint256 amount = startingBalance / 2;
+        uint256 ethAmount = 1 ether;
+        (uint256 sharesMinted,,uint256[2] memory balancesSpent) = SSM.depositZap{value: ethAmount}(amount, Constants.userPublicKey, 0);
+        uint256 swivDeposited = balancesSpent[0];
+        SSM.cooldown(sharesMinted);
+        vm.warp(block.timestamp + SSM.cooldownLength());
+        uint256 swivWithdrawn = swivDeposited - (swivDeposited*5/10000);
+        uint256 ethWithdrawn = ethAmount - (ethAmount*5/10000);
+        (uint256 sharesBurnt, ,uint256[2] memory balancesReturned ) = SSM.withdrawZap(swivWithdrawn, ethWithdrawn, payable(Constants.userPublicKey), Constants.userPublicKey, type(uint256).max); 
+        assertApproxEqRel(sharesBurnt, sharesMinted, 0.0005e18);
+    }
 
     // function testWithdrawIntegration() public {
         
@@ -299,6 +311,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
     // }
 
     function testExitQueries() public {
+
         IQuery balancerQuery = IQuery(0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5);
 
         IAsset[] memory assetData = new IAsset[](2);
@@ -306,8 +319,8 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         assetData[1] = IAsset(address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
 
         uint256[] memory amountData = new uint256[](2);
-        amountData[0] = 0;
-        amountData[1] = 0;
+        amountData[0] = 8678927661945;
+        amountData[1] = 4518764172;
 
         IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
                     assets: assetData,
@@ -349,25 +362,25 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         amountData[0] = 8678927661945;
         amountData[1] = 4518764172;
 
+        // IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+        //     assets: assetData,
+        //     maxAmountsIn: amountData,
+        //     userData: abi.encode(1, amountData, 0),
+        //     fromInternalBalance: false
+        // });
+
+        // // Query the pool join to get the amountsIn
+        // (uint256 bptOutFE, uint256[] memory amountsInFE) = balancerQuery.queryJoin(0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014, address(this), address(this), requestData);
+
+        // console.log("bptOut from join w/ bpt amount: ", bptOutFE);
+        // console.log("amounts from join w/ bpt amount: ", amountsInFE[0], amountsInFE[1]);
+
+        // amountData = amountsInFE;
+
         IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
             assets: assetData,
             maxAmountsIn: amountData,
-            userData: abi.encode(1, amountData, 0),
-            fromInternalBalance: false
-        });
-
-        // Query the pool join to get the amountsIn
-        (uint256 bptOutFE, uint256[] memory amountsInFE) = balancerQuery.queryJoin(0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014, address(this), address(this), requestData);
-
-        console.log("bptOut from join w/ bpt amount: ", bptOutFE);
-        console.log("amounts from join w/ bpt amount: ", amountsInFE[0], amountsInFE[1]);
-
-        amountData = amountsInFE;
-
-        requestData = IVault.JoinPoolRequest({
-            assets: assetData,
-            maxAmountsIn: amountsInFE,
-            userData: abi.encode(3,  bptOutFE),
+            userData: abi.encode(1,  3448318886742),
             fromInternalBalance: false
         });
 
