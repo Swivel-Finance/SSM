@@ -616,9 +616,7 @@ contract stkSWIV is ERC20 {
         SafeTransferLib.transferFrom(balancerLPT, msg.sender, address(this), amount);
         // Emit donation event
         emit Donation(amount, msg.sender);
-
     }
-
 
     //////////////////// ADMIN FUNCTIONS ////////////////////
 
