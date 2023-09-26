@@ -309,6 +309,79 @@ contract stkSWIV is ERC20 {
         return (shares);
     }
 
+    function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[2] memory amountsIn) {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(tokens[0]));
+        assetData[1] = IAsset(address(tokens[1]));
+
+        uint256[] memory amountData = new uint256[](2);
+
+        IVault.JoinPoolRequest memory requestData;
+
+        if (minimumBPT == 0) {
+            amountData[0] = amounts[0];
+            amountData[1] = amounts[1];
+            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, amountData, 0),
+                    fromInternalBalance: false
+                });
+            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+        }
+        else {
+            amountData[0] = type(uint256).max;
+            amountData[1] = type(uint256).max;
+            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(3, minimumBPT),
+                    fromInternalBalance: false
+                });
+            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+        }
+    }
+
+
+    function queryBalancerExit(address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal returns (uint256 maxBPT, uint256[2] memory amountsOut) {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(tokens[0]));
+        assetData[1] = IAsset(address(tokens[1]));
+
+        uint256[] memory amountData = new uint256[](2);
+
+        IVault.ExitPoolRequest memory requestData;
+
+        if (maximumBPT == type(uint256).max) {
+            amountData[0] = amounts[0];
+            amountData[1] = amounts[1];
+            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+                assets: assetData,
+                minAmountsOut: amountData,
+                userData: abi.encode(2, amountData, maximumBPT),
+                toInternalBalance: false
+            });
+            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
+            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+        }
+        else {
+            amountData[0] = amounts[0];
+            amountData[1] = amounts[1];
+            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+                assets: assetData,
+                minAmountsOut: amountData,
+                userData: abi.encode(1, maximumBPT),
+                toInternalBalance: false
+            });
+            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
+            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+        }
+    }
+
     //////////////////// ZAP METHODS ////////////////////
     // TODO: change to shares -> bpt query 
     // Transfers a calculated amount of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
