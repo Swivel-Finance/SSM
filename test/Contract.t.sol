@@ -236,7 +236,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         console.log("LPT Balance: ", LPT.balanceOf(address(SSM)));
         assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
         assertEq(BAL.balanceOf(address(SSM)), 0);
-        assertEq(BAL.balanceOf(address(WETH)), 0);
+        assertEq(WETH.balanceOf(address(SSM)), 0);
     }
 
     function testMintZap() public {
@@ -246,13 +246,14 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
         SSM.mintZap{value: 1.1 ether}(amount, Constants.userPublicKey, type(uint256).max);
         assertGe(SSM.balanceOf(address(Constants.userPublicKey)), amount);
         assertGt(LPT.balanceOf(address(SSM)), previousLPTBalance);
+        assertEq(LPT.balanceOf(address(SSM)), 908591188526872731418); // only valid for the current block, deprecated for future testing
         assertEq(BAL.balanceOf(address(SSM)), 0);
-        assertEq(BAL.balanceOf(address(WETH)), 0);
+        assertEq(WETH.balanceOf(address(SSM)), 0);
     }
 
     function testMintZapTooLittleShares() public {
         vm.startPrank(Constants.userPublicKey);
-        uint256 amount = 853211022431743032540000000000000000001;
+        uint256 amount = 853211022431743032540000000000000000000;
         uint256 previousLPTBalance = LPT.balanceOf(address(SSM));
         vm.expectRevert();
         SSM.mintZap{value: 1 ether}(amount, Constants.userPublicKey, type(uint256).max); 

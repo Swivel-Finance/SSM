@@ -318,7 +318,7 @@ contract stkSWIV is ERC20 {
     // @param: minimumBPT - minimum amount of BPTs to be minted
     // @returns: minBPT - the minimum amount of BPTs to be minted
     // @returns: amountsIn - the amounts of tokens required to mint minBPT
-    function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[2] memory amountsIn) {
+    function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[] memory amountsIn) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(tokens[0]));
@@ -337,8 +337,10 @@ contract stkSWIV is ERC20 {
                     userData: abi.encode(1, amountData, 0),
                     fromInternalBalance: false
                 });
-            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+            (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+            emit TestException("minBPT", minBPT, 0, address(0), address(0));
+            emit TestException("amountsIn", amountsIn[0], amountsIn[1], address(0), address(0));
+            return (minBPT, amountsIn);
         }
         // Else query the balancer pool for the maximum amount of tokens required for the given minimumBPT (Appears to be broken on balancers end for many pools)
         else {
@@ -350,8 +352,8 @@ contract stkSWIV is ERC20 {
                     userData: abi.encode(3, minimumBPT),
                     fromInternalBalance: false
                 });
-            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+            (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+            return (minBPT, amountsIn);
         }
     }
 
@@ -362,7 +364,7 @@ contract stkSWIV is ERC20 {
     // @param: maximumBPT - maximum amount of BPTs to be withdrawn
     // @returns: maxBPT - the maximum amount of BPTs to be withdrawn
     // @returns: amountsOut - the amounts of tokens received for maxBPT
-    function queryBalancerExit(address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal returns (uint256 maxBPT, uint256[2] memory amountsOut) {
+    function queryBalancerExit(address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal returns (uint256 maxBPT, uint256[] memory amountsOut) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(tokens[0]));
@@ -381,8 +383,8 @@ contract stkSWIV is ERC20 {
                 userData: abi.encode(2, amountData, maximumBPT),
                 toInternalBalance: false
             });
-            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
-            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+            (maxBPT, amountsOut) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
+            return (maxBPT, amountsOut);
         }
         // Else query the balancer pool for the minimum amount of tokens received for the given maximumBPT
         else {
@@ -394,8 +396,8 @@ contract stkSWIV is ERC20 {
                 userData: abi.encode(1, maximumBPT),
                 toInternalBalance: false
             });
-            (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
-            return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
+            (maxBPT, amountsOut) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
+            return (maxBPT, amountsOut);
         }
     }
 
@@ -425,25 +427,23 @@ contract stkSWIV is ERC20 {
         uint256[] memory amountData = new uint256[](2);
         amountData[0] = swivAmount;
         amountData[1] = msg.value;
-
-        IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-                    assets: assetData,
-                    maxAmountsIn: amountData,
-                    userData: abi.encode(1, amountData, 0),
-                    fromInternalBalance: false
-                });
         // Query the pool join to get the bpt out (assets)
-        (uint256 minBPT, uint256[] memory amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+        (uint256 minBPT, uint256[] memory amountsIn) = queryBalancerJoin([address(SWIV), address(WETH)], [swivAmount, msg.value], 0);
+        amountData[0] = amountsIn[0];
+        amountData[1] = amountsIn[1];
         // Calculate expected shares to mint before transfering funds 
         sharesToMint = convertToShares(minBPT);
         // Wrap msg.value into WETH
         WETH.deposit{value: msg.value}();
         // Transfer assets of SWIV tokens from sender to this contract
         SafeTransferLib.transferFrom(SWIV, msg.sender, address(this), amountsIn[0]);
-        // Encode new userData with queried amountsIn and bptOut
-        requestData.userData = abi.encode(1, amountsIn, minBPT);
         // Join the balancer pool using the request struct
-        IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
+        IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, amountData, minBPT),
+                    fromInternalBalance: false
+                }));
         // If the shares to mint is less than the minimum shares, revert
         if (sharesToMint < shares) {
             revert Exception(4, sharesToMint, shares, address(0), address(0));
