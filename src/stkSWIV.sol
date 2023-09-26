@@ -309,6 +309,15 @@ contract stkSWIV is ERC20 {
         return (shares);
     }
 
+     /////////////// INTERNAL QUERY METHODS ////////////////////   
+    
+    // Queries the balancer pool to either get the tokens required for an amount of BPTs or the amount of BPTs required for an amount of tokens
+    // @notice: Only covers weighted pools
+    // @param: tokens - array of token addresses
+    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
+    // @param: minimumBPT - minimum amount of BPTs to be minted
+    // @returns: minBPT - the minimum amount of BPTs to be minted
+    // @returns: amountsIn - the amounts of tokens required to mint minBPT
     function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[2] memory amountsIn) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
@@ -318,11 +327,11 @@ contract stkSWIV is ERC20 {
         uint256[] memory amountData = new uint256[](2);
 
         IVault.JoinPoolRequest memory requestData;
-
+        // If the minimumBPT is 0, query the balancer pool for the minimum amount of BPTs required for the given amounts of tokens
         if (minimumBPT == 0) {
             amountData[0] = amounts[0];
             amountData[1] = amounts[1];
-            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+            requestData = IVault.JoinPoolRequest({
                     assets: assetData,
                     maxAmountsIn: amountData,
                     userData: abi.encode(1, amountData, 0),
@@ -331,10 +340,11 @@ contract stkSWIV is ERC20 {
             (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
             return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
         }
+        // Else query the balancer pool for the maximum amount of tokens required for the given minimumBPT (Appears to be broken on balancers end for many pools)
         else {
             amountData[0] = type(uint256).max;
             amountData[1] = type(uint256).max;
-            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+            requestData = IVault.JoinPoolRequest({
                     assets: assetData,
                     maxAmountsIn: amountData,
                     userData: abi.encode(3, minimumBPT),
@@ -345,7 +355,13 @@ contract stkSWIV is ERC20 {
         }
     }
 
-
+    // Queries the balancer pool to either get the tokens received for an amount of BPTs or the amount of BPTs received for an amount of tokens
+    // @notice: Only covers weighted pools
+    // @param: tokens - array of token addresses
+    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
+    // @param: maximumBPT - maximum amount of BPTs to be withdrawn
+    // @returns: maxBPT - the maximum amount of BPTs to be withdrawn
+    // @returns: amountsOut - the amounts of tokens received for maxBPT
     function queryBalancerExit(address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal returns (uint256 maxBPT, uint256[2] memory amountsOut) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
@@ -355,11 +371,11 @@ contract stkSWIV is ERC20 {
         uint256[] memory amountData = new uint256[](2);
 
         IVault.ExitPoolRequest memory requestData;
-
+        // If the maximumBPT is max, query the balancer pool for the maximum amount of BPTs received for the given amounts of tokens
         if (maximumBPT == type(uint256).max) {
             amountData[0] = amounts[0];
             amountData[1] = amounts[1];
-            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+            requestData = IVault.ExitPoolRequest({
                 assets: assetData,
                 minAmountsOut: amountData,
                 userData: abi.encode(2, amountData, maximumBPT),
@@ -368,10 +384,11 @@ contract stkSWIV is ERC20 {
             (uint256 minBPT_, uint256[] memory amountsIn_) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
             return (minBPT_, [amountsIn_[0], amountsIn_[1]]);
         }
+        // Else query the balancer pool for the minimum amount of tokens received for the given maximumBPT
         else {
             amountData[0] = amounts[0];
             amountData[1] = amounts[1];
-            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+            requestData = IVault.ExitPoolRequest({
                 assets: assetData,
                 minAmountsOut: amountData,
                 userData: abi.encode(1, maximumBPT),
