@@ -328,7 +328,6 @@ contract stkSWIV is ERC20 {
         if (swivAmount > maximumSWIV) {
             revert Exception(5, swivAmount, maximumSWIV, address(0), address(0));
         }
-        uint256[] memory amountData = new uint256[](2);
         // Query the pool join to get the bpt out (assets)
         (uint256 minBPT, uint256[] memory amountsIn) = queryBalancerJoin([address(SWIV), address(WETH)], [swivAmount, msg.value], 0);
         // Calculate expected shares to mint before transfering funds 
