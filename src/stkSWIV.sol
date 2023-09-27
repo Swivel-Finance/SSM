@@ -519,7 +519,7 @@ contract stkSWIV is ERC20 {
             // If the allowance is not max, subtract the shares from the allowance, reverts on underflow if not enough allowance
             if (allowed != type(uint256).max) allowance[owner][msg.sender] = allowed - sharesRedeemed;
         }
-        // Exit the balancer pool using the request struct
+        // Exit the balancer pool
         balancerExit(2, [address(SWIV), address(WETH)], [amountsOut[0], amountsOut[1]], bptOut);
         // Unwrap the WETH
         WETH.withdraw(amountsOut[1]);
