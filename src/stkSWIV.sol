@@ -61,7 +61,7 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
-    constructor (ERC20 s, IVault v, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
+    constructor (ERC20 s, ERC20 b, bytes32 p) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
         balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
         balancerLPT = b;
@@ -309,169 +309,8 @@ contract stkSWIV is ERC20 {
         return (shares);
     }
 
-     /////////////// INTERNAL BALANCER METHODS ////////////////////   
-    
-    // Queries the balancer pool to either get the tokens required for an amount of BPTs or the amount of BPTs required for an amount of tokens
-    // @notice: Only covers weighted pools
-    // @param: tokens - array of token addresses
-    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
-    // @param: minimumBPT - minimum amount of BPTs to be minted
-    // @returns: minBPT - the minimum amount of BPTs to be minted
-    // @returns: amountsIn - the amounts of tokens required to mint minBPT
-    function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[] memory amountsIn) {
-        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData = new IAsset[](2);
-        assetData[0] = IAsset(address(tokens[0]));
-        assetData[1] = IAsset(address(tokens[1]));
-
-        uint256[] memory amountData = new uint256[](2);
-
-        // If the minimumBPT is 0, query the balancer pool for the minimum amount of BPTs required for the given amounts of tokens
-        if (minimumBPT == 0) {
-            amountData[0] = amounts[0];
-            amountData[1] = amounts[1];
-            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-                    assets: assetData,
-                    maxAmountsIn: amountData,
-                    userData: abi.encode(1, amountData, 0),
-                    fromInternalBalance: false
-                });
-            (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-            emit TestException("minBPT", minBPT, 0, address(0), address(0));
-            emit TestException("amountsIn", amountsIn[0], amountsIn[1], address(0), address(0));
-            return (minBPT, amountsIn);
-        }
-        // Else query the balancer pool for the maximum amount of tokens required for the given minimumBPT (Appears to be broken on balancers end for many pools)
-        else {
-            amountData[0] = type(uint256).max;
-            amountData[1] = type(uint256).max;
-            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-                    assets: assetData,
-                    maxAmountsIn: amountData,
-                    userData: abi.encode(3, minimumBPT),
-                    fromInternalBalance: false
-                });
-            (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-            return (minBPT, amountsIn);
-        }
-    }
-
-    // Queries the balancer pool to either get the tokens received for an amount of BPTs or the amount of BPTs received for an amount of tokens
-    // @notice: Only covers weighted pools
-    // @param: tokens - array of token addresses
-    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
-    // @param: maximumBPT - maximum amount of BPTs to be withdrawn
-    // @returns: maxBPT - the maximum amount of BPTs to be withdrawn
-    // @returns: amountsOut - the amounts of tokens received for maxBPT
-    function queryBalancerExit(address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal returns (uint256 maxBPT, uint256[] memory amountsOut) {
-        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData = new IAsset[](2);
-        assetData[0] = IAsset(address(tokens[0]));
-        assetData[1] = IAsset(address(tokens[1]));
-
-        uint256[] memory amountData = new uint256[](2);
-        // If the maximumBPT is max, query the balancer pool for the maximum amount of BPTs received for the given amounts of tokens
-        if (maximumBPT == type(uint256).max) {
-            amountData[0] = amounts[0];
-            amountData[1] = amounts[1];
-            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
-                assets: assetData,
-                minAmountsOut: amountData,
-                userData: abi.encode(2, amountData, maximumBPT),
-                toInternalBalance: false
-            });
-            (maxBPT, amountsOut) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
-            return (maxBPT, amountsOut);
-        }
-        // Else query the balancer pool for the minimum amount of tokens received for the given maximumBPT
-        else {
-            amountData[0] = amounts[0];
-            amountData[1] = amounts[1];
-            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
-                assets: assetData,
-                minAmountsOut: amountData,
-                userData: abi.encode(1, maximumBPT),
-                toInternalBalance: false
-            });
-            (maxBPT, amountsOut) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
-            return (maxBPT, amountsOut);
-        }
-    }
-
-    // Joins the balancer pool with the given tokens and amounts, minting at least minimumBPT (if relevant to the kind of join)
-    // @notice: Only covers weighted pools
-    // @param: kind - the kind of join (1 = exactTokensIn, 3 = exactBPTOut)
-    // @param: tokens - array of token addresses
-    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
-    // @param: minimumBPT - minimum amount of BPTs to be minted
-    function balancerJoin(uint8 kind, address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal {
-        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData = new IAsset[](2);
-        assetData[0] = IAsset(address(tokens[0]));
-        assetData[1] = IAsset(address(tokens[1]));
-
-        uint256[] memory amountData = new uint256[](2);
-        amountData[0] = amounts[0];
-        amountData[1] = amounts[1];
-        
-        if (kind == 1) {
-            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-                assets: assetData,
-                maxAmountsIn: amountData,
-                userData: abi.encode(1, amountData, minimumBPT),
-                fromInternalBalance: false
-            });
-            IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
-        }
-        else if (kind == 3) {
-            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
-                assets: assetData,
-                maxAmountsIn: amountData,
-                userData: abi.encode(3, minimumBPT),
-                fromInternalBalance: false
-            });
-            IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
-        }
-    }
-
-    // Exits the balancer pool with the given tokens and amounts, burning at most maximumBPT (if relevant to the kind of exit)
-    // @notice: Only covers weighted pools
-    // @param: kind - the kind of exit (1 = exactBPTIn, 2 = exactTokensOut)
-    // @param: tokens - array of token addresses
-    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
-    // @param: maximumBPT - maximum amount of BPTs to be burnt
-    function balancerExit(uint8 kind, address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal {
-        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
-        IAsset[] memory assetData = new IAsset[](2);
-        assetData[0] = IAsset(address(tokens[0]));
-        assetData[1] = IAsset(address(tokens[1]));
-
-        uint256[] memory amountData = new uint256[](2);
-        amountData[0] = amounts[0];
-        amountData[1] = amounts[1];
-        
-        if (kind == 1) {
-            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
-                assets: assetData,
-                minAmountsOut: amountData,
-                userData: abi.encode(1, maximumBPT),
-                toInternalBalance: false
-            });
-            IVault(balancerVault).exitPool(balancerPoolID, payable(address(this)), payable(address(this)), requestData);
-        }
-        else if (kind == 2) {
-            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
-                assets: assetData,
-                minAmountsOut: amountData,
-                userData: abi.encode(2, amountData, maximumBPT),
-                toInternalBalance: false
-            });
-            IVault(balancerVault).exitPool(balancerPoolID, payable(address(this)), payable(address(this)), requestData);
-        }
-    }
-
     //////////////////// ZAP METHODS ////////////////////
-    // TODO: change to shares -> bpt query 
+
     // Transfers a calculated amount of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
     // Then joins the balancer pool with the SWIV and ETH before minting minBPT of shares to `receiver`
     // Slippage is bound by the `shares` parameter and the calculated maximumSWIV
@@ -698,6 +537,168 @@ contract stkSWIV is ERC20 {
 
         return (sharesRedeemed, bptOut, [amountsOut[0], amountsOut[1]]);
     }
+
+     /////////////// INTERNAL BALANCER METHODS ////////////////////   
+    
+    // Queries the balancer pool to either get the tokens required for an amount of BPTs or the amount of BPTs required for an amount of tokens
+    // @notice: Only covers weighted pools
+    // @param: tokens - array of token addresses
+    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
+    // @param: minimumBPT - minimum amount of BPTs to be minted
+    // @returns: minBPT - the minimum amount of BPTs to be minted
+    // @returns: amountsIn - the amounts of tokens required to mint minBPT
+    function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[] memory amountsIn) {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(tokens[0]));
+        assetData[1] = IAsset(address(tokens[1]));
+
+        uint256[] memory amountData = new uint256[](2);
+
+        // If the minimumBPT is 0, query the balancer pool for the minimum amount of BPTs required for the given amounts of tokens
+        if (minimumBPT == 0) {
+            amountData[0] = amounts[0];
+            amountData[1] = amounts[1];
+            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(1, amountData, 0),
+                    fromInternalBalance: false
+                });
+            (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+            emit TestException("minBPT", minBPT, 0, address(0), address(0));
+            emit TestException("amountsIn", amountsIn[0], amountsIn[1], address(0), address(0));
+            return (minBPT, amountsIn);
+        }
+        // Else query the balancer pool for the maximum amount of tokens required for the given minimumBPT (Appears to be broken on balancers end for many pools)
+        else {
+            amountData[0] = type(uint256).max;
+            amountData[1] = type(uint256).max;
+            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                    assets: assetData,
+                    maxAmountsIn: amountData,
+                    userData: abi.encode(3, minimumBPT),
+                    fromInternalBalance: false
+                });
+            (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
+            return (minBPT, amountsIn);
+        }
+    }
+
+    // Queries the balancer pool to either get the tokens received for an amount of BPTs or the amount of BPTs received for an amount of tokens
+    // @notice: Only covers weighted pools
+    // @param: tokens - array of token addresses
+    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
+    // @param: maximumBPT - maximum amount of BPTs to be withdrawn
+    // @returns: maxBPT - the maximum amount of BPTs to be withdrawn
+    // @returns: amountsOut - the amounts of tokens received for maxBPT
+    function queryBalancerExit(address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal returns (uint256 maxBPT, uint256[] memory amountsOut) {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(tokens[0]));
+        assetData[1] = IAsset(address(tokens[1]));
+
+        uint256[] memory amountData = new uint256[](2);
+        // If the maximumBPT is max, query the balancer pool for the maximum amount of BPTs received for the given amounts of tokens
+        if (maximumBPT == type(uint256).max) {
+            amountData[0] = amounts[0];
+            amountData[1] = amounts[1];
+            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+                assets: assetData,
+                minAmountsOut: amountData,
+                userData: abi.encode(2, amountData, maximumBPT),
+                toInternalBalance: false
+            });
+            (maxBPT, amountsOut) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
+            return (maxBPT, amountsOut);
+        }
+        // Else query the balancer pool for the minimum amount of tokens received for the given maximumBPT
+        else {
+            amountData[0] = amounts[0];
+            amountData[1] = amounts[1];
+            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+                assets: assetData,
+                minAmountsOut: amountData,
+                userData: abi.encode(1, maximumBPT),
+                toInternalBalance: false
+            });
+            (maxBPT, amountsOut) = balancerQuery.queryExit(balancerPoolID, msg.sender, address(this), requestData);
+            return (maxBPT, amountsOut);
+        }
+    }
+
+    // Joins the balancer pool with the given tokens and amounts, minting at least minimumBPT (if relevant to the kind of join)
+    // @notice: Only covers weighted pools
+    // @param: kind - the kind of join (1 = exactTokensIn, 3 = exactBPTOut)
+    // @param: tokens - array of token addresses
+    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
+    // @param: minimumBPT - minimum amount of BPTs to be minted
+    function balancerJoin(uint8 kind, address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(tokens[0]));
+        assetData[1] = IAsset(address(tokens[1]));
+
+        uint256[] memory amountData = new uint256[](2);
+        amountData[0] = amounts[0];
+        amountData[1] = amounts[1];
+        
+        if (kind == 1) {
+            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                assets: assetData,
+                maxAmountsIn: amountData,
+                userData: abi.encode(1, amountData, minimumBPT),
+                fromInternalBalance: false
+            });
+            IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
+        }
+        else if (kind == 3) {
+            IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
+                assets: assetData,
+                maxAmountsIn: amountData,
+                userData: abi.encode(3, minimumBPT),
+                fromInternalBalance: false
+            });
+            IVault(balancerVault).joinPool(balancerPoolID, address(this), address(this), requestData);
+        }
+    }
+
+    // Exits the balancer pool with the given tokens and amounts, burning at most maximumBPT (if relevant to the kind of exit)
+    // @notice: Only covers weighted pools
+    // @param: kind - the kind of exit (1 = exactBPTIn, 2 = exactTokensOut)
+    // @param: tokens - array of token addresses
+    // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
+    // @param: maximumBPT - maximum amount of BPTs to be burnt
+    function balancerExit(uint8 kind, address[2] memory tokens, uint256[2] memory amounts, uint256 maximumBPT) internal {
+        // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
+        IAsset[] memory assetData = new IAsset[](2);
+        assetData[0] = IAsset(address(tokens[0]));
+        assetData[1] = IAsset(address(tokens[1]));
+
+        uint256[] memory amountData = new uint256[](2);
+        amountData[0] = amounts[0];
+        amountData[1] = amounts[1];
+        
+        if (kind == 1) {
+            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+                assets: assetData,
+                minAmountsOut: amountData,
+                userData: abi.encode(1, maximumBPT),
+                toInternalBalance: false
+            });
+            IVault(balancerVault).exitPool(balancerPoolID, payable(address(this)), payable(address(this)), requestData);
+        }
+        else if (kind == 2) {
+            IVault.ExitPoolRequest memory requestData = IVault.ExitPoolRequest({
+                assets: assetData,
+                minAmountsOut: amountData,
+                userData: abi.encode(2, amountData, maximumBPT),
+                toInternalBalance: false
+            });
+            IVault(balancerVault).exitPool(balancerPoolID, payable(address(this)), payable(address(this)), requestData);
+        }
+    }
+
 
     //////////////////// ADMIN FUNCTIONS ////////////////////
 
