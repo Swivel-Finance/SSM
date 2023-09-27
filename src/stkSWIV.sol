@@ -565,8 +565,6 @@ contract stkSWIV is ERC20 {
                     fromInternalBalance: false
                 });
             (minBPT, amountsIn) = balancerQuery.queryJoin(balancerPoolID, msg.sender, address(this), requestData);
-            emit TestException("minBPT", minBPT, 0, address(0), address(0));
-            emit TestException("amountsIn", amountsIn[0], amountsIn[1], address(0), address(0));
             return (minBPT, amountsIn);
         }
         // Else query the balancer pool for the maximum amount of tokens required for the given minimumBPT (Appears to be broken on balancers end for many pools)

@@ -31,7 +31,7 @@ function getMappingValue(address targetContract, uint256 mapSlot, address key) p
 
     function setUp() public {
         // Deploy new SSM contract
-        SSM = new stkSWIV(BAL, Vault, LPT, poolID);
+        SSM = new stkSWIV(BAL, LPT, poolID);
 
     //     deal(address(SSM), 0x7111F9Aeb2C1b9344EC274780dc9e3806bdc60Ef, 3732466346253321461382700026891);
     //     deal(address(LPT), address(SSM), 3732466346253);
