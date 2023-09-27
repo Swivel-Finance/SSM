@@ -43,7 +43,7 @@ contract stkSWIV is ERC20 {
     // The WETH address
     IWETH immutable public WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
-    event TestException(string, uint256, uint256, address, address);
+    event Donation(uint256 amount, address indexed donator);
 
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -496,7 +496,6 @@ contract stkSWIV is ERC20 {
         }
         // Query the pool exit to get the amounts out
         (uint256 bptOut, uint256[] memory amountsOut) = queryBalancerExit([address(SWIV), address(WETH)], [assets, ethAssets], maximumBPT);
-        emit TestException("BPT Amount", bptOut, bptOut, address(0), address(0));
         // Require the bptOut to be less than the maximum bpt (to account for slippage)
         if (bptOut > maximumBPT) {
             revert Exception(5, bptOut, maximumBPT, address(0), address(0));
@@ -699,6 +698,17 @@ contract stkSWIV is ERC20 {
         }
     }
 
+    //////////////////// FEE DONATION ////////////////////
+
+    // Method to donate a BPT amount to the SSM
+    // @param: amount - amount of BPT to donate
+    // @returns: the amount of BPT donated
+    function donate(uint256 amount) public {
+        // Transfer the BPT to the SSM
+        SafeTransferLib.transferFrom(balancerLPT, msg.sender, address(this), amount);
+        // Emit donation event
+        emit Donation(amount, msg.sender);
+    }
 
     //////////////////// ADMIN FUNCTIONS ////////////////////
 
