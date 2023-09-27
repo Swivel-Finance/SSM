@@ -329,7 +329,7 @@ contract stkSWIV is ERC20 {
             revert Exception(5, swivAmount, maximumSWIV, address(0), address(0));
         }
         // Query the pool join to get the bpt out (assets)
-        (uint256 minBPT, uint256[] memory amountsIn) = queryBalancerJoin([address(SWIV), address(WETH)], [swivAmount, msg.value], 0);
+        (uint256 minBPT, uint256[] memory amountsIn) = queryBalancerJoin(1, [address(SWIV), address(WETH)], [swivAmount, msg.value], 0);
         // Calculate expected shares to mint before transfering funds 
         sharesToMint = convertToShares(minBPT);
         // Wrap msg.value into WETH
@@ -436,7 +436,7 @@ contract stkSWIV is ERC20 {
     // Transfers `assets` of SWIV tokens from `msg.sender` while receiving `msg.value` of ETH
     // Then joins the balancer pool with the SWIV and ETH before minting `shares` to `receiver`
     // Slippage is bound by minimumBPT
-    // @param: assets - maximum amount of SWIV tokens to deposit
+    // @param: assets - amount of SWIV tokens to deposit
     // @param: receiver - address of the receiver
     // @param: minimumBPT - minimum amount of balancerLPT tokens to mint
     // @returns: the amount of stkSWIV shares minted
@@ -447,7 +447,7 @@ contract stkSWIV is ERC20 {
         // Wrap msg.value into WETH
         WETH.deposit{value: msg.value}();
         // Query the pool join to get the bpt out
-        (uint256 bptOut, uint256[] memory amountsIn) = queryBalancerJoin([address(SWIV), address(WETH)], [assets, msg.value], minimumBPT);
+        (uint256 bptOut, uint256[] memory amountsIn) = queryBalancerJoin(1, [address(SWIV), address(WETH)], [assets, msg.value], minimumBPT);
         // If the bptOut is less than the minimum bpt, revert (to account for slippage)
         if (bptOut < minimumBPT) {
             revert Exception(5, bptOut, minimumBPT, address(0), address(0));
@@ -540,12 +540,13 @@ contract stkSWIV is ERC20 {
     
     // Queries the balancer pool to either get the tokens required for an amount of BPTs or the amount of BPTs required for an amount of tokens
     // @notice: Only covers weighted pools
+    // @param: kind - type of join query (1 to get BPTs for precise token amounts, 3 to get precise token amounts from BPTs)
     // @param: tokens - array of token addresses
     // @param: amounts - array of token amounts (must be sorted in the same order as addresses)
     // @param: minimumBPT - minimum amount of BPTs to be minted
     // @returns: minBPT - the minimum amount of BPTs to be minted
     // @returns: amountsIn - the amounts of tokens required to mint minBPT
-    function queryBalancerJoin(address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[] memory amountsIn) {
+    function queryBalancerJoin(uint8 kind, address[2] memory tokens, uint256[2] memory amounts, uint256 minimumBPT) internal returns (uint256 minBPT, uint256[] memory amountsIn) {
         // Instantiate balancer request struct using SWIV and ETH alongside the amounts sent
         IAsset[] memory assetData = new IAsset[](2);
         assetData[0] = IAsset(address(tokens[0]));
@@ -554,7 +555,7 @@ contract stkSWIV is ERC20 {
         uint256[] memory amountData = new uint256[](2);
 
         // If the minimumBPT is 0, query the balancer pool for the minimum amount of BPTs required for the given amounts of tokens
-        if (minimumBPT == 0) {
+        if (kind == 1) {
             amountData[0] = amounts[0];
             amountData[1] = amounts[1];
             IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
@@ -567,7 +568,7 @@ contract stkSWIV is ERC20 {
             return (minBPT, amountsIn);
         }
         // Else query the balancer pool for the maximum amount of tokens required for the given minimumBPT (Appears to be broken on balancers end for many pools)
-        else {
+        else if (kind == 3) {
             amountData[0] = type(uint256).max;
             amountData[1] = type(uint256).max;
             IVault.JoinPoolRequest memory requestData = IVault.JoinPoolRequest({
