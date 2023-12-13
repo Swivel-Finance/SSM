@@ -178,7 +178,7 @@ contract stkSWIV is ERC20 {
     function cooldown(uint256 shares) public returns (uint256) {
         // Require the total amount to be < balanceOf
         if (cooldownAmount(msg.sender) + shares > balanceOf[msg.sender]) {
-            revert Exception(3, _cooldownAmount[msg.sender] + shares, balanceOf[msg.sender], msg.sender, address(0));
+            revert Exception(3, cooldownAmount(msg.sender) + shares, balanceOf[msg.sender], msg.sender, address(0));
         }
         // If cooldown window has passed, reset cooldownAmount + add, else add to current cooldownAmount
         if (cooldownTime[msg.sender] + withdrawalWindow < block.timestamp) {
@@ -231,7 +231,7 @@ contract stkSWIV is ERC20 {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the redeemed shares is greater than the cooldown amount, revert
-        uint256 cAmount = _cooldownAmount[msg.sender];
+        uint256 cAmount = cooldownAmount(msg.sender);
         if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
@@ -289,7 +289,7 @@ contract stkSWIV is ERC20 {
             revert Exception(0, cTime, block.timestamp, address(0), address(0));
         }
         // If the redeemed shares is greater than the cooldown amount, revert
-        uint256 cAmount = _cooldownAmount[msg.sender];
+        uint256 cAmount = cooldownAmount(msg.sender);
         if (shares > cAmount) {
             revert Exception(1, cAmount, shares, address(0), address(0));
         }
@@ -391,7 +391,7 @@ contract stkSWIV is ERC20 {
             }
             {
                 // If the redeemed shares is greater than the cooldown amount, revert
-                uint256 cAmount = _cooldownAmount[msg.sender];
+                uint256 cAmount = cooldownAmount(msg.sender);
                 if (shares > cAmount) {
                     revert Exception(1, cAmount, shares, address(0), address(0));
                 }
@@ -504,7 +504,7 @@ contract stkSWIV is ERC20 {
         // This method is unique in that we cannot check against cAmounts before calculating shares
         // If the redeemed shares is greater than the cooldown amount, revert
         {
-            uint256 cAmount = _cooldownAmount[msg.sender];
+            uint256 cAmount = cooldownAmount(msg.sender);
             if (sharesRedeemed > cAmount) {
                 revert Exception(1, cAmount, sharesRedeemed, address(0), address(0));
             }
