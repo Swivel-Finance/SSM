@@ -79,7 +79,7 @@ contract stkSWIV is ERC20 {
     // @notice: If the user's cooldown window is passed, their cooldown amount is reset to 0
     // @param: owner - address of the owner
     // @returns: the cooldown amount
-    function cooldownAmount(address owner) external view returns(uint256){
+    function cooldownAmount(address owner) public view returns(uint256){
         if (cooldownTime[owner] + withdrawalWindow < block.timestamp) {
             return 0;
         }
@@ -177,7 +177,7 @@ contract stkSWIV is ERC20 {
     // @returns: the total amount of stkSWIV shares to be withdrawn
     function cooldown(uint256 shares) public returns (uint256) {
         // Require the total amount to be < balanceOf
-        if (_cooldownAmount[msg.sender] + shares > balanceOf[msg.sender]) {
+        if (cooldownAmount(msg.sender) + shares > balanceOf[msg.sender]) {
             revert Exception(3, _cooldownAmount[msg.sender] + shares, balanceOf[msg.sender], msg.sender, address(0));
         }
         // If cooldown window has passed, reset cooldownAmount + add, else add to current cooldownAmount
