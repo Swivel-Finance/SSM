@@ -25,6 +25,8 @@ contract stkSWIV is ERC20 {
     IQuery immutable public balancerQuery;
     // The Static Balancer Token ERC20
     ERC20 immutable public balancerToken;
+    // The previous stkSWIV contract
+    address immutable public migratedSSM;
     // The Balancer Pool ID
     bytes32 public balancerPoolID;
     // The withdrawal cooldown length
@@ -62,7 +64,7 @@ contract stkSWIV is ERC20 {
 
     error Exception(uint8, uint256, uint256, address, address);
 
-    constructor (ERC20 s, ERC20 b, bytes32 p, address previous, address[] memory migrationOwners) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
+    constructor (ERC20 s, ERC20 b, bytes32 p, address previous) ERC20("Staked SWIV/ETH", "stkSWIV", s.decimals() + 18) {
         SWIV = s;
         balancerVault = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
         balancerLPT = b;
@@ -72,10 +74,13 @@ contract stkSWIV is ERC20 {
         admin = msg.sender;
         SafeTransferLib.approve(SWIV, address(balancerVault), type(uint256).max);
         SafeTransferLib.approve(ERC20(address(WETH)), address(balancerVault), type(uint256).max);
+        migratedSSM = previous;
+    }
 
+    function migrate(address[] calldata migrationOwners) external Authorized(admin) {
         // Mint each migrationOwner their balanceOf prevStkSWIV
         for (uint256 i = 0; i < migrationOwners.length; i++) {
-            _mint(migrationOwners[i], IERC20(previous).balanceOf(migrationOwners[i]));
+            _mint(migrationOwners[i], IERC20(migratedSSM).balanceOf(migrationOwners[i]));
         }
     }
 
