@@ -178,7 +178,7 @@ contract stkSWIV is ERC20 {
     function cooldown(uint256 shares) public returns (uint256) {
         // Require the total amount to be < balanceOf
         if (cooldownAmount(msg.sender) + shares > balanceOf[msg.sender]) {
-            revert Exception(3, cooldownAmount(msg.sender) + shares, balanceOf[msg.sender], msg.sender, address(0));
+            revert Exception(40, cooldownAmount(msg.sender) + shares, balanceOf[msg.sender], msg.sender, address(0));
         }
         // If cooldown window has passed, reset cooldownAmount + add, else add to current cooldownAmount
         if (cooldownTime[msg.sender] + withdrawalWindow < block.timestamp) {
@@ -228,16 +228,16 @@ contract stkSWIV is ERC20 {
         }
         // If the cooldown time is in the future or 0, revert
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
-            revert Exception(0, cTime, block.timestamp, address(0), address(0));
+            revert Exception(41, cTime, block.timestamp, address(0), address(0));
         }
         // If the redeemed shares is greater than the cooldown amount, revert
         uint256 cAmount = cooldownAmount(msg.sender);
         if (shares > cAmount) {
-            revert Exception(1, cAmount, shares, address(0), address(0));
+            revert Exception(40, cAmount, shares, address(0), address(0));
         }
         // If the shares are greater than the balance of the owner, revert
         if (shares > this.balanceOf(owner)) {
-            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+            revert Exception(42, shares, this.balanceOf(owner), address(0), address(0));
         }
         // Transfer the balancer LP tokens to the receiver
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
@@ -286,16 +286,16 @@ contract stkSWIV is ERC20 {
         }
         // If the cooldown time is in the future or 0, revert
         if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
-            revert Exception(0, cTime, block.timestamp, address(0), address(0));
+            revert Exception(41, cTime, block.timestamp, address(0), address(0));
         }
         // If the redeemed shares is greater than the cooldown amount, revert
         uint256 cAmount = cooldownAmount(msg.sender);
         if (shares > cAmount) {
-            revert Exception(1, cAmount, shares, address(0), address(0));
+            revert Exception(40, cAmount, shares, address(0), address(0));
         }
         // If the shares are greater than the balance of the owner, revert
         if (shares > this.balanceOf(owner)) {
-            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+            revert Exception(42, shares, this.balanceOf(owner), address(0), address(0));
         }
         // Transfer the balancer LP tokens to the receiver
         SafeTransferLib.transfer(balancerLPT, receiver, assets);
@@ -326,7 +326,7 @@ contract stkSWIV is ERC20 {
         uint256 swivAmount = msg.value * balances[0] / balances[1];
         // If the SWIV amount is greater than the maximum SWIV, revert
         if (swivAmount > maximumSWIV) {
-            revert Exception(5, swivAmount, maximumSWIV, address(0), address(0));
+            revert Exception(43, swivAmount, maximumSWIV, address(0), address(0));
         }
         // Query the pool join to get the bpt out (assets)
         (uint256 minBPT, uint256[] memory amountsIn) = queryBalancerJoin(1, [address(SWIV), address(WETH)], [swivAmount, msg.value], 0);
@@ -340,7 +340,7 @@ contract stkSWIV is ERC20 {
         balancerJoin(1, [address(SWIV), address(WETH)], [amountsIn[0], amountsIn[1]], minBPT);
         // If the shares to mint is less than the minimum shares, revert
         if (sharesToMint < shares) {
-            revert Exception(4, sharesToMint, shares, address(0), address(0));
+            revert Exception(44, sharesToMint, shares, address(0), address(0));
         }
         // Mint shares to receiver
         _mint(receiver, sharesToMint);
@@ -387,19 +387,19 @@ contract stkSWIV is ERC20 {
             }
             // If the cooldown time is in the future or 0, revert
             if (cTime > block.timestamp || cTime == 0 || cTime + withdrawalWindow < block.timestamp) {
-                revert Exception(0, cTime, block.timestamp, address(0), address(0));
+                revert Exception(41, cTime, block.timestamp, address(0), address(0));
             }
             {
                 // If the redeemed shares is greater than the cooldown amount, revert
                 uint256 cAmount = cooldownAmount(msg.sender);
                 if (shares > cAmount) {
-                    revert Exception(1, cAmount, shares, address(0), address(0));
+                    revert Exception(40, cAmount, shares, address(0), address(0));
                 }
             }
         }
         // If the shares are greater than the balance of the owner, revert
         if (shares > this.balanceOf(owner)) {
-            revert Exception(2, shares, this.balanceOf(owner), address(0), address(0));
+            revert Exception(42, shares, this.balanceOf(owner), address(0), address(0));
         }
         // Query the pool exit to get the amounts out
         (uint256 bptIn, uint256[] memory amountsOut) = queryBalancerExit([address(SWIV), address(WETH)], [minimumSWIV, minimumETH], assets);
@@ -408,12 +408,12 @@ contract stkSWIV is ERC20 {
             shares = convertToShares(bptIn);
             // Require the bptIn <= shares converted to assets (to account for slippage)
             if (bptIn > convertToAssets(shares)) {
-                revert Exception(5, bptIn, convertToAssets(shares), address(0), address(0));
+                revert Exception(46, bptIn, convertToAssets(shares), address(0), address(0));
             }
         }
         // If the eth or swiv out is less than the minimum, revert
         if (amountsOut[0] < minimumSWIV || amountsOut[1] < minimumETH) {
-            revert Exception(5, amountsOut[0], minimumSWIV, address(0), address(0));
+            revert Exception(47, amountsOut[0], minimumSWIV, address(0), address(0));
         }
         // Exit the balancer pool
         balancerExit(1, [address(SWIV), address(WETH)], [amountsOut[0], amountsOut[1]], bptIn);
@@ -450,7 +450,7 @@ contract stkSWIV is ERC20 {
         (uint256 bptOut, uint256[] memory amountsIn) = queryBalancerJoin(1, [address(SWIV), address(WETH)], [assets, msg.value], minimumBPT);
         // If the bptOut is less than the minimum bpt, revert (to account for slippage)
         if (bptOut < minimumBPT) {
-            revert Exception(5, bptOut, minimumBPT, address(0), address(0));
+            revert Exception(46, bptOut, minimumBPT, address(0), address(0));
         }
         //  Calculate shares to mint
         sharesMinted = convertToShares(bptOut);
@@ -491,13 +491,13 @@ contract stkSWIV is ERC20 {
         // If the sender is not the owner check allowances
         // If the cooldown time is in the future or 0, revert
         if (cTime > block.timestamp || cTime + withdrawalWindow < block.timestamp) {
-            revert Exception(0, cTime, block.timestamp, address(0), address(0));
+            revert Exception(41, cTime, block.timestamp, address(0), address(0));
         }
         // Query the pool exit to get the amounts out
         (uint256 bptOut, uint256[] memory amountsOut) = queryBalancerExit([address(SWIV), address(WETH)], [assets, ethAssets], maximumBPT);
         // Require the bptOut to be less than the maximum bpt (to account for slippage)
         if (bptOut > maximumBPT) {
-            revert Exception(5, bptOut, maximumBPT, address(0), address(0));
+            revert Exception(46, bptOut, maximumBPT, address(0), address(0));
         }
         // Calculate shares to redeem
         sharesRedeemed = convertToShares(bptOut);
@@ -506,7 +506,7 @@ contract stkSWIV is ERC20 {
         {
             uint256 cAmount = cooldownAmount(msg.sender);
             if (sharesRedeemed > cAmount) {
-                revert Exception(1, cAmount, sharesRedeemed, address(0), address(0));
+                revert Exception(40, cAmount, sharesRedeemed, address(0), address(0));
             }
         }
         // If the shares are greater than the balance of the owner, revert
